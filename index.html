@@ -99,6 +99,17 @@
   .choice-btn.disabled-choice{opacity:0.35;}
   .game-section{width:100%; max-width:520px; margin-bottom:16px;}
   .section-label{font-weight:bold; color:#a15c00; margin-bottom:8px; font-size:1.1rem;}
+  .sentence-build-row{
+    min-height:64px; width:100%; max-width:560px; background:#fff; border:3px dashed #e0d5c8; border-radius:18px;
+    padding:12px 16px; display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:20px;
+  }
+  .placed-token{
+    background:#d9f7be; border:3px solid var(--green); border-radius:14px; padding:8px 16px;
+    font-size:1.4rem; font-weight:bold; color:var(--ink);
+  }
+  .build-placeholder{color:#ccc; font-size:1.2rem;}
+  .tile-bank{display:flex; flex-wrap:wrap; justify-content:center; gap:12px; width:100%; max-width:560px;}
+  .choice-btn.sentence-tile{font-size:1.4rem; padding:14px 22px; font-weight:bold;}
   .sentence-choice-list{display:flex; flex-direction:column; gap:14px; width:100%; max-width:560px;}
   .choice-btn.sentence-choice{font-size:1.3rem; padding:20px 18px; text-align:left; display:block;}
   .game-emoji{font-size:2.6rem;}
@@ -208,6 +219,7 @@ const LESSONS = [
 ];
 const DAY_KEYS = ["A","B","C","D"];
 const DAY_ICON = {A:"1️⃣",B:"2️⃣",C:"3️⃣",D:"4️⃣",E:"⭐"};
+const GAME_SCOPE_LABEL = {A:"測驗範圍：星期一",B:"測驗範圍：星期二",C:"測驗範圍：星期三",D:"測驗範圍：星期四",ALL:"測驗範圍：全部（週一~週四）"};
 
 /* ---------- 手繪小圖示（給沒有現成 emoji 的抽象單字用） ---------- */
 const ICONS = {
@@ -268,18 +280,20 @@ function getTotalMaxStars(){
 }
 
 /* ---------- TTS ---------- */
+const WORD_RATE = 0.85;
+const SENTENCE_RATE = 0.425;
 let voices = [];
 function loadVoices(){ voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; }
 if('speechSynthesis' in window){
   loadVoices();
   speechSynthesis.onvoiceschanged = loadVoices;
 }
-function speak(text){
+function speak(text, rate){
   if(!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'en-US';
-  u.rate = 0.85;
+  u.rate = rate || WORD_RATE;
   const v = voices.find(v=>v.lang && v.lang.startsWith('en'));
   if(v) u.voice = v;
   speechSynthesis.speak(u);
@@ -336,10 +350,20 @@ function buildLessonSentencePool(lessonIdx){
   return sentences;
 }
 
+function buildWordPool(lessonIdx, dayKey){
+  if(dayKey === 'ALL') return buildLessonWordPool(lessonIdx);
+  return LESSONS[lessonIdx].days[dayKey].words;
+}
+
+function buildSentencePool(lessonIdx, dayKey){
+  if(dayKey === 'ALL') return buildLessonSentencePool(lessonIdx);
+  return LESSONS[lessonIdx].days[dayKey].sentences;
+}
+
 function goHome(){ state = {screen:'home', lessonIdx:0, dayKey:null, items:[], pos:0, game:null}; render(); }
 function goLesson(idx){ state.screen='lesson'; state.lessonIdx=idx; render(); }
 function goReviewMenu(){ state.screen='reviewMenu'; render(); }
-function goGameMenu(){ state.screen='gameMenu'; render(); }
+function goGameDays(){ state.screen='gameDays'; render(); }
 
 /* ---------- 複習卡片（純聽讀，不計星星） ---------- */
 function goReview(dayKey){
@@ -359,31 +383,72 @@ function prevReview(){
   if(state.pos>0){ state.pos-=1; render(); }
 }
 
-/* ---------- 聽力配對遊戲（答對才給星星） ---------- */
-function goGame(){
-  const pool = buildLessonWordPool(state.lessonIdx);
-  const roundSize = Math.min(10, pool.length);
-  const order = shuffle(pool).slice(0, roundSize);
+/* ---------- 聽力遊戲（單字配對＋句子排序合併，答對才給星星） ---------- */
+function goGame(dayKey){
+  dayKey = dayKey || 'ALL';
+  const wordPool = buildWordPool(state.lessonIdx, dayKey);
+  const sentencePool = buildSentencePool(state.lessonIdx, dayKey);
+  const wordRoundSize = Math.min(10, wordPool.length);
+  const sentenceRoundSize = Math.min(8, sentencePool.length);
+  const wordItems = shuffle(wordPool).slice(0, wordRoundSize).map(w=>({kind:'word', data:w}));
+  const sentenceItems = shuffle(sentencePool).slice(0, sentenceRoundSize).flatMap(s=>[
+    {kind:'sentence', subKind:'choice', data:s},
+    {kind:'sentence', subKind:'order', data:s}
+  ]);
+  const order = shuffle([...wordItems, ...sentenceItems]);
   state.screen = 'game';
-  state.game = { pool, order, qIndex:0, sessionStars:0, current:null, wordChoices:[], pictureChoices:[], wordDone:false, pictureDone:false, wordLocked:false, pictureLocked:false, wordMistake:false, pictureMistake:false };
-  setupGameQuestion();
+  state.game = { dayKey, wordPool, sentencePool, order, qIndex:0, sessionStars:0 };
+  setupQuestion();
   render();
-  setTimeout(()=>speak(state.game.current.en), 300);
+  speakCurrentQuestion();
 }
-function setupGameQuestion(){
+function speakCurrentQuestion(){
   const g = state.game;
-  const current = g.order[g.qIndex];
-  const distractors = shuffle(g.pool.filter(w=>w.en!==current.en)).slice(0,3);
-  const optionSet = [current, ...distractors];
-  g.current = current;
-  g.wordChoices = shuffle(optionSet);
-  g.pictureChoices = shuffle(optionSet);
-  g.wordDone = false;
-  g.pictureDone = false;
-  g.wordLocked = false;
-  g.pictureLocked = false;
-  g.wordMistake = false;
-  g.pictureMistake = false;
+  const item = g.order[g.qIndex];
+  if(item.kind==='word') setTimeout(()=>speak(item.data.en), 300);
+  else setTimeout(()=>speak(item.data, SENTENCE_RATE), 300);
+}
+function setupQuestion(){
+  const g = state.game;
+  const item = g.order[g.qIndex];
+  if(item.kind === 'word'){
+    const current = item.data;
+    const distractors = shuffle(g.wordPool.filter(w=>w.en!==current.en)).slice(0,3);
+    const optionSet = [current, ...distractors];
+    g.current = current;
+    g.wordChoices = shuffle(optionSet);
+    g.pictureChoices = shuffle(optionSet);
+    g.wordDone = false;
+    g.pictureDone = false;
+    g.wordLocked = false;
+    g.pictureLocked = false;
+    g.wordMistake = false;
+    g.pictureMistake = false;
+  } else if(item.subKind === 'order'){
+    const sentence = item.data;
+    const tokens = sentence.split(' ');
+    g.current = sentence;
+    g.sentenceTokens = shuffle(tokens.map((t,i)=>({text:t, idx:i})));
+    g.placedTokens = [];
+    g.sentenceMistake = false;
+    g.sentenceDone = false;
+  } else {
+    const current = item.data;
+    const distractors = shuffle(g.sentencePool.filter(s=>s!==current)).slice(0,3);
+    g.current = current;
+    g.sentenceChoices = shuffle([current, ...distractors]);
+    g.sentenceChoiceDone = false;
+    g.sentenceChoiceLocked = false;
+    g.sentenceChoiceMistake = false;
+  }
+}
+function advanceQuestion(){
+  const g = state.game;
+  if(g.qIndex < g.order.length-1){
+    g.qIndex += 1; setupQuestion(); render(); speakCurrentQuestion();
+  } else {
+    state.screen='gameEnd'; render(); confettiBurst();
+  }
 }
 function handleAnswer(btnEl, en, kind){
   const g = state.game;
@@ -402,16 +467,8 @@ function handleAnswer(btnEl, en, kind){
     }
     setTimeout(()=>{
       g[doneKey] = true;
-      if(g.wordDone && g.pictureDone){
-        if(g.qIndex < g.order.length-1){
-          g.qIndex += 1; setupGameQuestion(); render();
-          setTimeout(()=>speak(g.current.en), 300);
-        } else {
-          state.screen='gameEnd'; render(); confettiBurst();
-        }
-      } else {
-        render();
-      }
+      if(g.wordDone && g.pictureDone) advanceQuestion();
+      else render();
     }, 600);
   } else {
     g[mistakeKey] = true;
@@ -419,52 +476,55 @@ function handleAnswer(btnEl, en, kind){
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
 }
-
-/* ---------- 句子聽力遊戲（答對才給星星） ---------- */
-function goSentenceGame(){
-  const pool = buildLessonSentencePool(state.lessonIdx);
-  const roundSize = Math.min(8, pool.length);
-  const order = shuffle(pool).slice(0, roundSize);
-  state.screen = 'sentenceGame';
-  state.sentenceGame = { pool, order, qIndex:0, sessionStars:0, current:null, choices:[], done:false, locked:false, mistake:false };
-  setupSentenceQuestion();
-  render();
-  setTimeout(()=>speak(state.sentenceGame.current), 300);
-}
-function setupSentenceQuestion(){
-  const g = state.sentenceGame;
-  const current = g.order[g.qIndex];
-  const distractors = shuffle(g.pool.filter(s=>s!==current)).slice(0,3);
-  g.current = current;
-  g.choices = shuffle([current, ...distractors]);
-  g.done = false;
-  g.locked = false;
-  g.mistake = false;
-}
-function handleSentenceAnswer(btnEl, idx){
-  const g = state.sentenceGame;
-  if(g.done || g.locked) return;
-  const text = g.choices[idx];
-  if(text === g.current){
-    g.locked = true;
+function handleSentenceTap(btnEl, idx){
+  const g = state.game;
+  if(g.sentenceDone) return;
+  const expectedIdx = g.placedTokens.length;
+  if(idx === expectedIdx){
     btnEl.classList.add('correct');
-    if(!g.mistake){
+    setTimeout(()=>{
+      const token = g.sentenceTokens.find(t=>t.idx===idx);
+      g.placedTokens.push(token);
+      g.sentenceTokens = g.sentenceTokens.filter(t=>t.idx!==idx);
+      if(g.sentenceTokens.length === 0){
+        g.sentenceDone = true;
+        if(!g.sentenceMistake){
+          markMastered(state.lessonIdx, 'sentence', g.current);
+          g.sessionStars += 1;
+          const badge = document.querySelector('.score-badge');
+          if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+        }
+        render();
+        setTimeout(()=>advanceQuestion(), 700);
+      } else {
+        render();
+      }
+    }, 300);
+  } else {
+    g.sentenceMistake = true;
+    btnEl.classList.add('wrong');
+    setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
+  }
+}
+function handleSentenceChoiceTap(btnEl, idx){
+  const g = state.game;
+  if(g.sentenceChoiceDone || g.sentenceChoiceLocked) return;
+  const text = g.sentenceChoices[idx];
+  if(text === g.current){
+    g.sentenceChoiceLocked = true;
+    btnEl.classList.add('correct');
+    if(!g.sentenceChoiceMistake){
       markMastered(state.lessonIdx, 'sentence', g.current);
       g.sessionStars += 1;
       const badge = document.querySelector('.score-badge');
       if(badge) badge.textContent = '⭐ ' + g.sessionStars;
     }
     setTimeout(()=>{
-      g.done = true;
-      if(g.qIndex < g.order.length-1){
-        g.qIndex += 1; setupSentenceQuestion(); render();
-        setTimeout(()=>speak(g.current), 300);
-      } else {
-        state.screen='sentenceGameEnd'; render(); confettiBurst();
-      }
+      g.sentenceChoiceDone = true;
+      advanceQuestion();
     }, 600);
   } else {
-    g.mistake = true;
+    g.sentenceChoiceMistake = true;
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -476,17 +536,15 @@ function render(){
   if(state.screen==='home') app.innerHTML = renderHome();
   else if(state.screen==='lesson') app.innerHTML = renderLesson();
   else if(state.screen==='reviewMenu') app.innerHTML = renderReviewMenu();
-  else if(state.screen==='gameMenu') app.innerHTML = renderGameMenu();
+  else if(state.screen==='gameDays') app.innerHTML = renderGameDayPicker();
   else if(state.screen==='review') app.innerHTML = renderReview();
   else if(state.screen==='reviewEnd') app.innerHTML = renderReviewEnd();
   else if(state.screen==='game') app.innerHTML = renderGame();
   else if(state.screen==='gameEnd') app.innerHTML = renderGameEnd();
-  else if(state.screen==='sentenceGame') app.innerHTML = renderSentenceGame();
-  else if(state.screen==='sentenceGameEnd') app.innerHTML = renderSentenceGameEnd();
   bindEvents();
   if(state.screen==='review'){
     const item = state.items[state.pos];
-    setTimeout(()=>speak(item.en), 300);
+    setTimeout(()=>speak(item.en, item.type==='sentence' ? SENTENCE_RATE : WORD_RATE), 300);
   }
 }
 
@@ -521,7 +579,7 @@ function renderLesson(){
           <span class="emoji">📖</span>
           <span>先複習</span>
         </button>
-        <button class="card-btn l4" data-action="game-menu">
+        <button class="card-btn l4" data-action="game-days">
           <span class="emoji">🎮</span>
           <span>直接玩遊戲</span>
         </button>
@@ -549,15 +607,27 @@ function renderReviewMenu(){
   `;
 }
 
-function renderGameMenu(){
+function renderGameDayPicker(){
   const lesson = LESSONS[state.lessonIdx];
+  const dayNames = {A:"星期一",B:"星期二",C:"星期三",D:"星期四"};
+  let btns = DAY_KEYS.map(k=>`
+    <button class="card-btn day${k}" data-action="start-game" data-day="${k}">
+      <span class="emoji">${DAY_ICON[k]}</span>
+      <span>${dayNames[k]}</span>
+    </button>
+  `).join('');
+  btns += `
+    <button class="card-btn dayE" data-action="start-game" data-day="ALL">
+      <span class="emoji">⭐</span>
+      <span>全部（週一~週四）</span>
+    </button>
+  `;
   return `
     <div class="screen">
       <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
       <h1>${lesson.emoji} ${lesson.title}</h1>
-      <h2>🎮 選一個遊戲，答對拿星星！</h2>
-      <button class="game-btn" data-action="game">🎮 聽力配對遊戲（本週全部單字，答對拿星星！）</button>
-      <button class="game-btn" data-action="sentence-game">🗣️ 句子聽力遊戲（本週全部句子，答對拿星星！）</button>
+      <h2>🎮 聽力遊戲：要考單日還是全部？</h2>
+      <div class="grid">${btns}</div>
     </div>
   `;
 }
@@ -608,10 +678,9 @@ function renderReviewEnd(){
       <div class="end-wrap">
         <div class="end-stars">📖✨📖</div>
         <h1>複習完成！</h1>
-        <h2>要不要玩聽力配對遊戲賺星星呢？</h2>
+        <h2>要不要玩聽力遊戲賺星星呢？</h2>
         <div>
-          <button class="big-btn" style="background:var(--purple)" data-action="game">🎮 單字遊戲</button>
-          <button class="big-btn" style="background:var(--orange)" data-action="sentence-game">🗣️ 句子遊戲</button>
+          <button class="big-btn" style="background:var(--purple)" data-action="game-from-review">🎮 玩遊戲</button>
           <button class="big-btn" style="background:var(--green)" data-action="replay-review">🔁 再複習一次</button>
           <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 選別的星期</button>
           <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
@@ -621,13 +690,7 @@ function renderReviewEnd(){
   `;
 }
 
-function renderGame(){
-  const g = state.game;
-  let dots = g.order.map((it,i)=>{
-    let cls='dot'+(i<g.qIndex?' done':'')+(i===g.qIndex?' current':'');
-    return `<div class="${cls}"></div>`;
-  }).join('');
-
+function renderWordQuestion(g){
   function choiceButtons(choices, kind, done){
     return choices.map(c=>{
       const isCorrect = c.en === g.current.en;
@@ -638,6 +701,62 @@ function renderGame(){
       return `<button class="${cls}" ${attrs}>${inner}</button>`;
     }).join('');
   }
+  return `
+    <h2>🎧 聽聽看，選出正確的單字卡和圖片卡！</h2>
+    <button class="big-speaker" data-action="speak-current">🔊</button>
+    <div class="game-section">
+      <div class="section-label">${g.wordDone?'✅ ':''}選單字</div>
+      <div class="choice-grid">${choiceButtons(g.wordChoices, 'word', g.wordDone)}</div>
+    </div>
+    <div class="game-section">
+      <div class="section-label">${g.pictureDone?'✅ ':''}選圖片</div>
+      <div class="choice-grid">${choiceButtons(g.pictureChoices, 'picture', g.pictureDone)}</div>
+    </div>
+    <div class="hint">先聽聲音，兩邊都選對才會進下一題</div>
+  `;
+}
+
+function renderSentenceOrderQuestion(g){
+  const placedHTML = g.placedTokens.map(t=>`<span class="placed-token">${t.text}</span>`).join('');
+  const bankHTML = g.sentenceTokens.map(t=>`
+    <button class="choice-btn sentence-tile" data-action="sentence-tap" data-idx="${t.idx}">${t.text}</button>
+  `).join('');
+  return `
+    <h2>🗣️ 聽聽看，把單字依序排成句子！</h2>
+    <button class="big-speaker" data-action="speak-current">🔊</button>
+    <div class="sentence-build-row">${placedHTML || '<span class="build-placeholder">…</span>'}</div>
+    <div class="tile-bank">${bankHTML}</div>
+    <div class="hint">先聽聲音，依照順序點選單字排成句子</div>
+  `;
+}
+
+function renderSentenceChoiceQuestion(g){
+  let choices = g.sentenceChoices.map((c,i)=>{
+    const isCorrect = c === g.current;
+    let cls = 'choice-btn sentence-choice';
+    if(g.sentenceChoiceDone) cls += isCorrect ? ' correct' : ' disabled-choice';
+    const attrs = g.sentenceChoiceDone ? '' : `data-action="sentence-choice-tap" data-idx="${i}"`;
+    return `<button class="${cls}" ${attrs}><span>${c}</span></button>`;
+  }).join('');
+  return `
+    <h2>🗣️ 聽聽看，選出正確的句子！</h2>
+    <button class="big-speaker" data-action="speak-current">🔊</button>
+    <div class="sentence-choice-list">${choices}</div>
+    <div class="hint">先聽聲音，再選出對應的句子卡</div>
+  `;
+}
+
+function renderGame(){
+  const g = state.game;
+  const item = g.order[g.qIndex];
+  let dots = g.order.map((it,i)=>{
+    let cls='dot'+(i<g.qIndex?' done':'')+(i===g.qIndex?' current':'');
+    return `<div class="${cls}"></div>`;
+  }).join('');
+  let body;
+  if(item.kind==='word') body = renderWordQuestion(g);
+  else if(item.subKind==='order') body = renderSentenceOrderQuestion(g);
+  else body = renderSentenceChoiceQuestion(g);
 
   return `
     <div class="screen">
@@ -645,17 +764,8 @@ function renderGame(){
       <div class="score-badge">⭐ ${g.sessionStars}</div>
       <div class="progress">${dots}</div>
       <div class="practice-wrap">
-        <h2>🎧 聽聽看，選出正確的單字卡和圖片卡！</h2>
-        <button class="big-speaker" data-action="speak-game">🔊</button>
-        <div class="game-section">
-          <div class="section-label">${g.wordDone?'✅ ':''}選單字</div>
-          <div class="choice-grid">${choiceButtons(g.wordChoices, 'word', g.wordDone)}</div>
-        </div>
-        <div class="game-section">
-          <div class="section-label">${g.pictureDone?'✅ ':''}選圖片</div>
-          <div class="choice-grid">${choiceButtons(g.pictureChoices, 'picture', g.pictureDone)}</div>
-        </div>
-        <div class="hint">先聽聲音，兩邊都選對才會進下一題</div>
+        <div class="tag">${GAME_SCOPE_LABEL[g.dayKey]}</div>
+        ${body}
       </div>
     </div>
   `;
@@ -666,59 +776,12 @@ function renderGameEnd(){
   return `
     <div class="screen">
       <div class="end-wrap">
-        <div class="end-stars">🌟🎮🌟</div>
+        <div class="end-stars">🌟🎉🌟</div>
         <h1>遊戲結束！</h1>
-        <h2>完成了 ${g.order.length} 題配對，獲得 ${g.sessionStars} 顆星星！</h2>
+        <h2>完成了 ${g.order.length} 題（單字＋句子），獲得 ${g.sessionStars} 顆星星！</h2>
         <div class="stars-total">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}　|　全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
         <div>
           <button class="big-btn" style="background:var(--purple)" data-action="game">🔁 再玩一次</button>
-          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 回課程選單</button>
-          <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderSentenceGame(){
-  const g = state.sentenceGame;
-  let dots = g.order.map((it,i)=>{
-    let cls='dot'+(i<g.qIndex?' done':'')+(i===g.qIndex?' current':'');
-    return `<div class="${cls}"></div>`;
-  }).join('');
-  let choices = g.choices.map((c,i)=>{
-    const isCorrect = c === g.current;
-    let cls = 'choice-btn sentence-choice';
-    if(g.done) cls += isCorrect ? ' correct' : ' disabled-choice';
-    const attrs = g.done ? '' : `data-action="sentence-answer" data-idx="${i}"`;
-    return `<button class="${cls}" ${attrs}><span>${c}</span></button>`;
-  }).join('');
-  return `
-    <div class="screen">
-      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
-      <div class="score-badge">⭐ ${g.sessionStars}</div>
-      <div class="progress">${dots}</div>
-      <div class="practice-wrap">
-        <h2>🗣️ 聽聽看，選出正確的句子！</h2>
-        <button class="big-speaker" data-action="speak-sentence-game">🔊</button>
-        <div class="sentence-choice-list">${choices}</div>
-        <div class="hint">先聽聲音，再選出對應的句子卡</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderSentenceGameEnd(){
-  const g = state.sentenceGame;
-  return `
-    <div class="screen">
-      <div class="end-wrap">
-        <div class="end-stars">🌟🗣️🌟</div>
-        <h1>句子遊戲結束！</h1>
-        <h2>完成了 ${g.order.length} 題，獲得 ${g.sessionStars} 顆星星！</h2>
-        <div class="stars-total">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}　|　全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
-        <div>
-          <button class="big-btn" style="background:var(--purple)" data-action="sentence-game">🔁 再玩一次</button>
           <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 回課程選單</button>
           <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
         </div>
@@ -733,20 +796,24 @@ function bindEvents(){
       const action = el.dataset.action;
       if(action==='lesson') goLesson(parseInt(el.dataset.idx,10));
       else if(action==='review-menu') goReviewMenu();
-      else if(action==='game-menu') goGameMenu();
+      else if(action==='game-days') goGameDays();
       else if(action==='review') goReview(el.dataset.key);
       else if(action==='replay-review') goReview(state.dayKey);
       else if(action==='home') goHome();
       else if(action==='lesson-back') goLesson(state.lessonIdx);
       else if(action==='next') nextReview();
       else if(action==='prev') prevReview();
-      else if(action==='speak'){ const item = state.items[state.pos]; speak(item.en); }
-      else if(action==='game') goGame();
-      else if(action==='speak-game'){ speak(state.game.current.en); }
+      else if(action==='speak'){ const item = state.items[state.pos]; speak(item.en, item.type==='sentence' ? SENTENCE_RATE : WORD_RATE); }
+      else if(action==='start-game') goGame(el.dataset.day);
+      else if(action==='game-from-review') goGame(state.dayKey==='E' ? 'ALL' : state.dayKey);
+      else if(action==='game') goGame(state.game ? state.game.dayKey : 'ALL');
+      else if(action==='speak-current'){
+        const item = state.game.order[state.game.qIndex];
+        speak(item.kind==='word' ? item.data.en : item.data, item.kind==='word' ? WORD_RATE : SENTENCE_RATE);
+      }
       else if(action==='answer') handleAnswer(el, el.dataset.en, el.dataset.kind);
-      else if(action==='sentence-game') goSentenceGame();
-      else if(action==='speak-sentence-game'){ speak(state.sentenceGame.current); }
-      else if(action==='sentence-answer') handleSentenceAnswer(el, parseInt(el.dataset.idx,10));
+      else if(action==='sentence-tap') handleSentenceTap(el, parseInt(el.dataset.idx,10));
+      else if(action==='sentence-choice-tap') handleSentenceChoiceTap(el, parseInt(el.dataset.idx,10));
     });
   });
 }
