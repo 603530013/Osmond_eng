@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Osmond 英文單字遊戲</title>
+<style>
+  :root{
+    --pink:#ff6fa5; --orange:#ff9f43; --yellow:#ffd93d; --green:#6bcB77;
+    --blue:#4d96ff; --purple:#9b5de5; --bg:#fef6f0; --ink:#3a3a3a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; min-height:100vh; background:linear-gradient(180deg,#fff9f0,#ffe9d6);
+    font-family:'Comic Sans MS','Chalkboard SE','Segoe UI',sans-serif;
+    color:var(--ink); display:flex; flex-direction:column; align-items:center;
+    overflow-x:hidden;
+  }
+  .screen{width:100%; max-width:900px; padding:20px; display:flex; flex-direction:column; align-items:center; min-height:100vh;}
+  h1{font-size:2.2rem; margin:10px 0; text-align:center;}
+  h2{font-size:1.6rem; margin:8px 0; text-align:center;}
+  .stars-total{font-size:1.3rem; background:#fff; border-radius:30px; padding:8px 22px; box-shadow:0 4px 0 #ddd; margin-bottom:20px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:18px; width:100%; margin-top:10px;}
+  .card-btn{
+    border:none; border-radius:24px; padding:26px 14px; font-size:1.3rem; font-weight:bold;
+    color:#fff; cursor:pointer; box-shadow:0 6px 0 rgba(0,0,0,0.15); transition:transform .08s;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  .card-btn:active{transform:translateY(6px); box-shadow:0 0 0 rgba(0,0,0,0.15);}
+  .card-btn .emoji{font-size:2.6rem;}
+  .lesson-stars{background:rgba(255,255,255,0.3); border-radius:14px; padding:3px 12px; font-size:0.95rem; margin-top:2px;}
+  .l0{background:var(--blue);} .l1{background:var(--pink);} .l2{background:var(--green);}
+  .l3{background:var(--orange);} .l4{background:var(--purple);}
+  .dayA{background:#4d96ff;} .dayB{background:#6bcB77;} .dayC{background:#ff9f43;}
+  .dayD{background:#ff6fa5;} .dayE{background:#f7c948; color:#5a3d00;}
+  .back-btn{
+    align-self:flex-start; border:none; background:#fff; border-radius:16px; padding:10px 18px;
+    font-size:1.1rem; box-shadow:0 4px 0 #ddd; cursor:pointer; margin-bottom:10px;
+  }
+  .practice-wrap{flex:1; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .progress{display:flex; gap:6px; margin-bottom:24px; flex-wrap:wrap; justify-content:center;}
+  .dot{width:14px; height:14px; border-radius:50%; background:#e0d5c8;}
+  .dot.done{background:var(--green);}
+  .dot.current{background:var(--orange); transform:scale(1.3);}
+  .flashcard{
+    background:#fff; border-radius:32px; box-shadow:0 10px 0 #e8d9c8; padding:40px 30px;
+    width:100%; max-width:600px; text-align:center; min-height:320px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  }
+  .flashcard .emoji-big{font-size:6rem; line-height:1;}
+  .word-en{font-size:3rem; font-weight:bold; color:var(--pink); word-break:break-word;}
+  .word-zh{font-size:1.4rem; color:#888;}
+  .sentence-en{font-size:2rem; font-weight:bold; color:var(--blue); line-height:1.4;}
+  .tag{font-size:1rem; background:#ffe9d6; padding:4px 14px; border-radius:20px; color:#a15c00;}
+  .btn-row{display:flex; gap:16px; margin-top:26px; flex-wrap:wrap; justify-content:center;}
+  .round-btn{
+    border:none; border-radius:50%; width:78px; height:78px; font-size:2rem; cursor:pointer;
+    box-shadow:0 6px 0 rgba(0,0,0,0.15); color:#fff;
+  }
+  .round-btn:active{transform:translateY(6px); box-shadow:none;}
+  .speak-btn{background:var(--blue);}
+  .prev-btn{background:#bbb;}
+  .next-btn{background:var(--green);}
+  .end-wrap{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:16px;}
+  .end-stars{font-size:3.5rem;}
+  .big-btn{
+    border:none; border-radius:20px; padding:16px 30px; font-size:1.2rem; font-weight:bold; color:#fff;
+    cursor:pointer; box-shadow:0 6px 0 rgba(0,0,0,0.15); margin:6px;
+  }
+  .game-btn{
+    border:none; border-radius:26px; padding:20px 24px; font-size:1.4rem; font-weight:bold; color:#fff;
+    background:linear-gradient(135deg,var(--purple),var(--pink)); cursor:pointer;
+    box-shadow:0 6px 0 rgba(0,0,0,0.15); margin-top:24px; width:100%; max-width:520px;
+  }
+  .game-btn:active{transform:translateY(6px); box-shadow:none;}
+  .confetti{position:fixed; top:-20px; font-size:1.8rem; animation:fall linear forwards; pointer-events:none;}
+  @keyframes fall{ to{ transform:translateY(110vh) rotate(360deg); opacity:0.3; } }
+  .hint{color:#999; font-size:1rem; margin-top:10px;}
+  .score-badge{position:fixed; top:14px; right:14px; background:#fff; border-radius:20px; padding:8px 16px; box-shadow:0 4px 0 #ddd; font-weight:bold; font-size:1.1rem;}
+  .big-speaker{
+    width:110px; height:110px; border-radius:50%; background:var(--blue); color:#fff; font-size:3rem;
+    border:none; box-shadow:0 8px 0 rgba(0,0,0,0.15); cursor:pointer; margin:10px 0 24px;
+  }
+  .big-speaker:active{transform:translateY(8px); box-shadow:none;}
+  .choice-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; width:100%; max-width:520px;}
+  .choice-btn{
+    background:#fff; border:4px solid #eee; border-radius:20px; padding:22px 10px; font-size:1.5rem;
+    font-weight:bold; cursor:pointer; box-shadow:0 6px 0 #ddd; display:flex; flex-direction:column;
+    align-items:center; gap:8px; color:var(--ink);
+  }
+  .choice-btn:active{transform:translateY(4px); box-shadow:0 2px 0 #ddd;}
+  .choice-btn.correct{background:#d9f7be; border-color:var(--green); animation:pop .3s;}
+  .choice-btn.wrong{background:#ffd6d6; border-color:#ff6b6b; animation:shake .4s;}
+  .choice-btn.text-only{font-size:1.6rem; padding:18px 10px;}
+  .choice-btn.icon-only{padding:10px;}
+  .choice-btn.icon-only .game-emoji{font-size:2.8rem;}
+  .choice-btn.icon-only .svg-icon svg{width:56px; height:56px;}
+  .choice-btn.disabled-choice{opacity:0.35;}
+  .game-section{width:100%; max-width:520px; margin-bottom:16px;}
+  .section-label{font-weight:bold; color:#a15c00; margin-bottom:8px; font-size:1.1rem;}
+  .sentence-choice-list{display:flex; flex-direction:column; gap:14px; width:100%; max-width:560px;}
+  .choice-btn.sentence-choice{font-size:1.3rem; padding:20px 18px; text-align:left; display:block;}
+  .game-emoji{font-size:2.6rem;}
+  .svg-icon{display:inline-flex;}
+  .svg-icon svg{width:100%; height:100%;}
+  .emoji-big.svg-icon svg{width:110px; height:110px;}
+  .img-icon{display:inline-flex; border-radius:16px; overflow:hidden; box-shadow:0 3px 0 rgba(0,0,0,0.1);}
+  .img-icon img{width:100%; height:100%; object-fit:cover; display:block;}
+  .emoji-big.img-icon{width:140px; height:140px;}
+  .game-emoji.img-icon{width:90px; height:90px;}
+  .choice-btn.icon-only .img-icon{width:80px; height:80px;}
+  @keyframes pop{ 0%{transform:scale(1);} 50%{transform:scale(1.1);} 100%{transform:scale(1);} }
+  @keyframes shake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);} 75%{transform:translateX(8px);} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ---------- 課程資料 (TL3 Lesson 1-5) ---------- */
+const LESSONS = [
+{
+  title:"Lesson 1: The Weather", emoji:"⛅", color:"l0",
+  days:{
+    A:{ label:"Monday", words:[
+          {en:"short",zh:"短的",icon:"short"},{en:"vowel",zh:"母音",icon:"vowel"},{en:"rat",zh:"老鼠",emoji:"🐀"},{en:"fat",zh:"胖的",icon:"fat"}],
+        sentences:["How is the weather today?"] },
+    B:{ label:"Tuesday", words:[
+          {en:"black",zh:"黑色的",emoji:"⚫"},{en:"cat",zh:"貓",emoji:"🐱"},{en:"can",zh:"鐵罐",emoji:"🥫"},{en:"tap",zh:"輕敲",emoji:"👆"}],
+        sentences:["Is it raining?","No, it isn't."] },
+    C:{ label:"Wednesday", words:[
+          {en:"pan",zh:"平底鍋",emoji:"🍳"},{en:"sun",zh:"太陽",emoji:"🌞"},{en:"cloud",zh:"雲朵",emoji:"☁️"},{en:"cloudy",zh:"多雲的;陰天的",emoji:"⛅"}],
+        sentences:["What color is the sky?","The sky is blue."] },
+    D:{ label:"Thursday", words:[
+          {en:"sky",zh:"天空",img:"assets/sky.jpg"},{en:"raining",zh:"正在下雨",emoji:"🌧️"},{en:"sunny",zh:"晴朗的",img:"assets/sunny.jpg"},{en:"raindrop",zh:"雨滴",emoji:"💧"}],
+        sentences:["Can you see the sun?","Yes, I can see the sun."] },
+  }
+},
+{
+  title:"Lesson 2: The Park", emoji:"🌳", color:"l1",
+  days:{
+    A:{ label:"Monday", words:[
+          {en:"sound",zh:"聲音",emoji:"🔊"},{en:"letter",zh:"字母",emoji:"🔤"},{en:"dad",zh:"爸爸",img:"assets/dad.jpg"},{en:"bad",zh:"壞的;不好的",img:"assets/bad.jpg"}],
+        sentences:["My dad had a bad day."] },
+    B:{ label:"Tuesday", words:[
+          {en:"day",zh:"日子",img:"assets/day.jpg"},{en:"sad",zh:"難過的",emoji:"😢"},{en:"kid",zh:"小孩",img:"assets/kid.png"},{en:"bench",zh:"長凳",img:"assets/bench.jpg"}],
+        sentences:["What is in the park?","There is a flower in the park!"] },
+    C:{ label:"Wednesday", words:[
+          {en:"tree",zh:"樹",emoji:"🌳"},{en:"path",zh:"小徑",img:"assets/path.jpg"},{en:"temple",zh:"寺院;廟",img:"assets/temple.jpg"},{en:"fountain",zh:"噴泉",emoji:"⛲"}],
+        sentences:["Look! What is in the park?","There is a statue in the park!"] },
+    D:{ label:"Thursday", words:[
+          {en:"flower",zh:"花",emoji:"🌸"},{en:"statue",zh:"雕像",img:"assets/statue.jpg"},{en:"park",zh:"公園",img:"assets/park.jpg"},{en:"There is",zh:"有",icon:"thereis"}],
+        sentences:["What is in the park?","There is a tree in the park!"] },
+  }
+},
+{
+  title:"Lesson 3: School Things", emoji:"🎒", color:"l2",
+  days:{
+    A:{ label:"Monday", words:[
+          {en:"yam",zh:"甘薯",img:"assets/yam.jpg"},{en:"jam",zh:"果醬",img:"assets/jam.jpg"},{en:"ham",zh:"火腿",img:"assets/ham.jpg"},{en:"where",zh:"哪裡",img:"assets/where.png"}],
+        sentences:["Hurry, you are late for school!"] },
+    B:{ label:"Tuesday", words:[
+          {en:"little",zh:"小的",icon:"little"},{en:"pencil",zh:"鉛筆",emoji:"✏️"},{en:"my",zh:"我的",icon:"my"},{en:"pencil case",zh:"鉛筆盒",img:"assets/pencilcase.jpg"}],
+        sentences:["Where is my school bag?","It is on the table."] },
+    C:{ label:"Wednesday", words:[
+          {en:"ruler",zh:"尺",emoji:"📏"},{en:"book",zh:"書本",emoji:"📖"},{en:"pen",zh:"原子筆;鋼筆",emoji:"🖋️"},{en:"this",zh:"這個",icon:"this"}],
+        sentences:["Where is my book?","It is in the school bag."] },
+    D:{ label:"Thursday", words:[
+          {en:"late",zh:"遲的",img:"assets/late.jpg"},{en:"school",zh:"學校",emoji:"🏫"},{en:"nice",zh:"美好的",icon:"nice"},{en:"eraser",zh:"橡皮擦",img:"assets/eraser.jpg"}],
+        sentences:["Have a nice day at school!","Thanks! Good-bye!"] },
+  }
+},
+{
+  title:"Lesson 4: At the Ice Cream Shop", emoji:"🍦", color:"l3",
+  days:{
+    A:{ label:"Monday", words:[
+          {en:"fat",zh:"胖的",icon:"fat"},{en:"mat",zh:"地墊",img:"assets/mat.jpg"},{en:"milk",zh:"牛奶",img:"assets/milk.jpg"},{en:"scream",zh:"尖叫",img:"assets/scream.jpg"}],
+        sentences:["This is a fat rat."] },
+    B:{ label:"Tuesday", words:[
+          {en:"this",zh:"這個",icon:"this"},{en:"flavor",zh:"味道",img:"assets/flavor.jpg"},{en:"ice cream",zh:"冰淇淋",emoji:"🍨"},{en:"strawberry",zh:"草莓",emoji:"🍓"}],
+        sentences:["What flavors do you have today?","We have strawberry, vanilla, and chocolate."] },
+    C:{ label:"Wednesday", words:[
+          {en:"vanilla",zh:"香草",img:"assets/vanilla.jpg"},{en:"all",zh:"全部",icon:"all"},{en:"favorite",zh:"最喜歡的",img:"assets/favorite.jpg"},{en:"chocolate",zh:"巧克力",emoji:"🍫"}],
+        sentences:["Strawberry is my favorite.","I want strawberry."] },
+    D:{ label:"Thursday", words:[
+          {en:"size",zh:"尺寸",icon:"size"},{en:"cone",zh:"冰淇淋甜筒",img:"assets/cone.jpg"},{en:"small",zh:"小的",icon:"small"},{en:"dish",zh:"盤;碟",emoji:"🍽️"}],
+        sentences:["Do you want it in a cone or in a dish?","I want it in a dish, please."] },
+  }
+},
+{
+  title:"Lesson 5: On the Farm", emoji:"🚜", color:"l4",
+  days:{
+    A:{ label:"Monday", words:[
+          {en:"cap",zh:"棒球帽",emoji:"🧢"},{en:"map",zh:"地圖",emoji:"🗺️"},{en:"lap",zh:"膝部",img:"assets/lap.jpg"},{en:"new",zh:"新的",icon:"new"}],
+        sentences:["Frobear bought a new cap."] },
+    B:{ label:"Tuesday", words:[
+          {en:"his",zh:"他的",icon:"his"},{en:"farm",zh:"農場",img:"assets/farm.jpg"},{en:"rabbit",zh:"兔子",emoji:"🐰"},{en:"farmer",zh:"農夫",emoji:"👨‍🌾"}],
+        sentences:["What animals are there on your farm?","There are two horses, two ducks, two cows and two pigs."] },
+    C:{ label:"Wednesday", words:[
+          {en:"duck",zh:"鴨子",emoji:"🦆"},{en:"pig",zh:"豬",emoji:"🐷"},{en:"goat",zh:"山羊",emoji:"🐐"},{en:"cow",zh:"母牛",emoji:"🐄"}],
+        sentences:["No, there aren't.","There are three pigs."] },
+    D:{ label:"Thursday", words:[
+          {en:"horse",zh:"馬",emoji:"🐴"},{en:"animal",zh:"動物",img:"assets/animal.jpg"},{en:"two",zh:"二",emoji:"2️⃣"},{en:"three",zh:"三",emoji:"3️⃣"}],
+        sentences:["Where is pig number three?","Right here."] },
+  }
+}
+];
+const DAY_KEYS = ["A","B","C","D"];
+const DAY_ICON = {A:"1️⃣",B:"2️⃣",C:"3️⃣",D:"4️⃣",E:"⭐"};
+
+/* ---------- 手繪小圖示（給沒有現成 emoji 的抽象單字用） ---------- */
+const ICONS = {
+  short: `<svg viewBox="0 0 120 120"><line x1="15" y1="38" x2="105" y2="38" stroke="#3a3a3a" stroke-width="8" stroke-linecap="round"/><line x1="35" y1="80" x2="70" y2="80" stroke="#3a3a3a" stroke-width="8" stroke-linecap="round"/><ellipse cx="52" cy="80" rx="30" ry="18" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
+  vowel: `<svg viewBox="0 0 120 120"><text x="60" y="55" font-size="26" font-weight="bold" fill="#ff3b3b" text-anchor="middle" font-family="Comic Sans MS, sans-serif">A E I</text><text x="60" y="88" font-size="26" font-weight="bold" fill="#ff3b3b" text-anchor="middle" font-family="Comic Sans MS, sans-serif">O U</text></svg>`,
+  where: `<svg viewBox="0 0 120 120"><path d="M60 15 C35 15 20 35 20 55 C20 80 60 105 60 105 C60 105 100 80 100 55 C100 35 85 15 60 15 Z" fill="#4d96ff" stroke="#3a3a3a" stroke-width="5"/><circle cx="60" cy="55" r="16" fill="#fff"/><text x="60" y="64" font-size="24" font-weight="bold" fill="#ff3b3b" text-anchor="middle">?</text></svg>`,
+  little: `<svg viewBox="0 0 120 120"><circle cx="38" cy="68" r="30" fill="#ffd93d" stroke="#3a3a3a" stroke-width="5"/><circle cx="92" cy="82" r="11" fill="#ffd93d" stroke="#3a3a3a" stroke-width="5"/><circle cx="92" cy="82" r="19" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
+  my: `<svg viewBox="0 0 120 120"><circle cx="28" cy="26" r="11" fill="#ffe0b3" stroke="#3a3a3a" stroke-width="4"/><path d="M17 40 Q28 34 39 40 L39 72 Q28 78 17 72 Z" fill="#4d96ff" stroke="#3a3a3a" stroke-width="4"/><circle cx="28" cy="66" r="15" fill="#3a3a3a" stroke="#222" stroke-width="3"/><circle cx="20" cy="56" r="5" fill="#3a3a3a" stroke="#222" stroke-width="2"/><circle cx="36" cy="56" r="5" fill="#3a3a3a" stroke="#222" stroke-width="2"/><circle cx="23" cy="64" r="2" fill="#fff"/><circle cx="33" cy="64" r="2" fill="#fff"/><path d="M28 92 L28 105" stroke="#ff3b3b" stroke-width="4" stroke-linecap="round"/><polygon points="28,82 21,95 35,95" fill="#ff3b3b"/><circle cx="90" cy="26" r="11" fill="#ffe0b3" stroke="#3a3a3a" stroke-width="4"/><path d="M79 40 Q90 34 101 40 L101 72 Q90 78 79 72 Z" fill="#ff6fa5" stroke="#3a3a3a" stroke-width="4"/><circle cx="90" cy="66" r="15" fill="#ffb6c1" stroke="#3a3a3a" stroke-width="3"/><ellipse cx="82" cy="50" rx="4" ry="11" fill="#ffb6c1" stroke="#3a3a3a" stroke-width="2"/><ellipse cx="98" cy="50" rx="4" ry="11" fill="#ffb6c1" stroke="#3a3a3a" stroke-width="2"/><circle cx="84" cy="64" r="2" fill="#3a3a3a"/><circle cx="96" cy="64" r="2" fill="#3a3a3a"/></svg>`,
+  this: `<svg viewBox="0 0 120 120"><rect x="10" y="80" width="100" height="10" fill="#c9a876" stroke="#3a3a3a" stroke-width="4"/><rect x="18" y="90" width="8" height="20" fill="#a9825a" stroke="#3a3a3a" stroke-width="3"/><rect x="94" y="90" width="8" height="20" fill="#a9825a" stroke="#3a3a3a" stroke-width="3"/><circle cx="82" cy="63" r="9" fill="#ff9f43" stroke="#3a3a3a" stroke-width="3"/><circle cx="38" cy="64" r="16" fill="#ff6b6b" stroke="#3a3a3a" stroke-width="4"/><path d="M38 32 L38 42" stroke="#ff3b3b" stroke-width="4" stroke-linecap="round"/><polygon points="38,50 30,36 46,36" fill="#ff3b3b"/></svg>`,
+  nice: `<svg viewBox="0 0 120 120"><circle cx="48" cy="55" r="38" fill="#fff6d6" stroke="#3a3a3a" stroke-width="6"/><circle cx="34" cy="48" r="5" fill="#3a3a3a"/><circle cx="62" cy="48" r="5" fill="#3a3a3a"/><path d="M30 65 Q48 85 66 65" fill="none" stroke="#ff3b3b" stroke-width="6" stroke-linecap="round"/><g transform="translate(66,58)"><rect x="0" y="16" width="20" height="26" rx="6" fill="#ffd93d" stroke="#3a3a3a" stroke-width="4"/><rect x="4" y="-8" width="10" height="26" rx="5" fill="#ffd93d" stroke="#3a3a3a" stroke-width="4" transform="rotate(-20 9 5)"/></g></svg>`,
+  eraser: `<svg viewBox="0 0 120 120"><rect x="20" y="40" width="80" height="40" rx="8" fill="#ff9fc0" stroke="#3a3a3a" stroke-width="5"/><rect x="20" y="40" width="80" height="16" rx="8" fill="#fff" stroke="#3a3a3a" stroke-width="5"/></svg>`,
+  mat: `<svg viewBox="0 0 120 120"><rect x="15" y="30" width="90" height="60" rx="6" fill="#a3d9a5" stroke="#3a3a3a" stroke-width="5"/><rect x="27" y="42" width="66" height="36" rx="4" fill="none" stroke="#3a3a3a" stroke-width="3" stroke-dasharray="6 5"/></svg>`,
+  all: `<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="42" fill="#ffd93d" stroke="#3a3a3a" stroke-width="4"/><circle cx="60" cy="60" r="34" fill="#ff9f43" stroke="#3a3a3a" stroke-width="2"/><line x1="60" y1="60" x2="60" y2="18" stroke="#3a3a3a" stroke-width="2"/><line x1="60" y1="60" x2="97" y2="39" stroke="#3a3a3a" stroke-width="2"/><line x1="60" y1="60" x2="97" y2="81" stroke="#3a3a3a" stroke-width="2"/><line x1="60" y1="60" x2="60" y2="102" stroke="#3a3a3a" stroke-width="2"/><line x1="60" y1="60" x2="23" y2="81" stroke="#3a3a3a" stroke-width="2"/><line x1="60" y1="60" x2="23" y2="39" stroke="#3a3a3a" stroke-width="2"/><circle cx="60" cy="40" r="4" fill="#c0392b"/><circle cx="78" cy="50" r="4" fill="#c0392b"/><circle cx="78" cy="70" r="4" fill="#c0392b"/><circle cx="60" cy="80" r="4" fill="#c0392b"/><circle cx="42" cy="70" r="4" fill="#c0392b"/><circle cx="42" cy="50" r="4" fill="#c0392b"/><circle cx="60" cy="60" r="50" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
+  size: `<svg viewBox="0 0 120 120"><circle cx="25" cy="72" r="22" fill="#c68958" stroke="#3a3a3a" stroke-width="4"/><circle cx="25" cy="40" r="16" fill="#c68958" stroke="#3a3a3a" stroke-width="4"/><circle cx="14" cy="26" r="6" fill="#c68958" stroke="#3a3a3a" stroke-width="3"/><circle cx="36" cy="26" r="6" fill="#c68958" stroke="#3a3a3a" stroke-width="3"/><circle cx="20" cy="40" r="2" fill="#3a3a3a"/><circle cx="30" cy="40" r="2" fill="#3a3a3a"/><path d="M18,47 Q25,52 32,47" fill="none" stroke="#3a3a3a" stroke-width="2.5" stroke-linecap="round"/><circle cx="62" cy="76" r="16" fill="#c68958" stroke="#3a3a3a" stroke-width="4"/><circle cx="62" cy="52" r="12" fill="#c68958" stroke="#3a3a3a" stroke-width="4"/><circle cx="54" cy="42" r="4.5" fill="#c68958" stroke="#3a3a3a" stroke-width="3"/><circle cx="70" cy="42" r="4.5" fill="#c68958" stroke="#3a3a3a" stroke-width="3"/><circle cx="58" cy="52" r="1.6" fill="#3a3a3a"/><circle cx="66" cy="52" r="1.6" fill="#3a3a3a"/><path d="M57,58 Q62,62 67,58" fill="none" stroke="#3a3a3a" stroke-width="2" stroke-linecap="round"/><circle cx="96" cy="79" r="11" fill="#c68958" stroke="#3a3a3a" stroke-width="3.5"/><circle cx="96" cy="61" r="8" fill="#c68958" stroke="#3a3a3a" stroke-width="3.5"/><circle cx="90" cy="54" r="3" fill="#c68958" stroke="#3a3a3a" stroke-width="2.5"/><circle cx="102" cy="54" r="3" fill="#c68958" stroke="#3a3a3a" stroke-width="2.5"/><circle cx="93" cy="61" r="1.2" fill="#3a3a3a"/><circle cx="99" cy="61" r="1.2" fill="#3a3a3a"/><path d="M92,65 Q96,68 100,65" fill="none" stroke="#3a3a3a" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+  small: `<svg viewBox="0 0 120 120"><rect x="15" y="55" width="45" height="45" rx="6" fill="#4d96ff" stroke="#3a3a3a" stroke-width="5"/><rect x="75" y="80" width="20" height="20" rx="4" fill="#4d96ff" stroke="#3a3a3a" stroke-width="5"/><rect x="70" y="75" width="30" height="30" rx="4" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
+  lap: `<svg viewBox="0 0 120 120"><circle cx="60" cy="28" r="14" fill="#ffe9d6" stroke="#3a3a3a" stroke-width="5"/><line x1="60" y1="42" x2="60" y2="68" stroke="#3a3a3a" stroke-width="6" stroke-linecap="round"/><line x1="60" y1="68" x2="30" y2="78" stroke="#3a3a3a" stroke-width="10" stroke-linecap="round"/><line x1="60" y1="68" x2="90" y2="78" stroke="#3a3a3a" stroke-width="10" stroke-linecap="round"/><ellipse cx="60" cy="75" rx="28" ry="12" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
+  his: `<svg viewBox="0 0 120 120"><circle cx="30" cy="26" r="11" fill="#ffe0b3" stroke="#3a3a3a" stroke-width="4"/><path d="M19,40 Q30,34 41,40 L41,72 Q30,78 19,72 Z" fill="#4d96ff" stroke="#3a3a3a" stroke-width="4"/><rect x="14" y="60" width="32" height="16" rx="4" fill="#ff3b3b" stroke="#3a3a3a" stroke-width="3"/><rect x="20" y="52" width="16" height="10" rx="3" fill="#ff3b3b" stroke="#3a3a3a" stroke-width="3"/><circle cx="20" cy="76" r="4" fill="#3a3a3a"/><circle cx="40" cy="76" r="4" fill="#3a3a3a"/><path d="M30,50 Q25,38 30,30" fill="none" stroke="#ff3b3b" stroke-width="3.5" stroke-linecap="round"/><polygon points="30,26 24,34 34,33" fill="#ff3b3b"/><circle cx="90" cy="26" r="11" fill="#ffe0b3" stroke="#3a3a3a" stroke-width="4"/><path d="M79,40 Q90,34 101,40 L101,72 Q90,78 79,72 Z" fill="#ff6fa5" stroke="#3a3a3a" stroke-width="4"/><circle cx="90" cy="66" r="13" fill="#c68958" stroke="#3a3a3a" stroke-width="3"/><circle cx="82" cy="56" r="5" fill="#c68958" stroke="#3a3a3a" stroke-width="2.5"/><circle cx="98" cy="56" r="5" fill="#c68958" stroke="#3a3a3a" stroke-width="2.5"/><circle cx="86" cy="66" r="1.6" fill="#3a3a3a"/><circle cx="94" cy="66" r="1.6" fill="#3a3a3a"/></svg>`,
+  new: `<svg viewBox="0 0 120 120"><path d="M8,85 Q8,70 22,68 L42,64 Q50,62 54,70 L58,82 Q58,88 50,88 L14,88 Q8,88 8,85 Z" fill="#b5a180" stroke="#3a3a3a" stroke-width="3"/><line x1="12" y1="88" x2="55" y2="88" stroke="#3a3a3a" stroke-width="3"/><line x1="20" y1="72" x2="30" y2="76" stroke="#8a7a5c" stroke-width="2"/><path d="M66,85 Q66,70 80,68 L100,64 Q108,62 112,70 L116,82 Q116,88 108,88 L72,88 Q66,88 66,85 Z" fill="#4d96ff" stroke="#3a3a3a" stroke-width="3"/><line x1="70" y1="88" x2="113" y2="88" stroke="#3a3a3a" stroke-width="3"/><path d="M95,38 l3,8 l8,3 l-8,3 l-3,8 l-3,-8 l-8,-3 l8,-3 Z" fill="#ffd93d"/><path d="M75,50 l2,5 l5,2 l-5,2 l-2,5 l-2,-5 l-5,-2 l5,-2 Z" fill="#ffd93d"/></svg>`,
+  thereis: `<svg viewBox="0 0 120 120"><rect x="5" y="55" width="45" height="45" rx="4" fill="#e8c39e" stroke="#3a3a3a" stroke-width="4"/><rect x="2" y="47" width="51" height="12" rx="3" fill="#d4a373" stroke="#3a3a3a" stroke-width="4"/><circle cx="27" cy="70" r="9" fill="#ff6b6b" stroke="#3a3a3a" stroke-width="3"/><path d="M27 30 L27 18" stroke="#3a3a3a" stroke-width="3" stroke-linecap="round"/><polygon points="27,38 20,24 34,24" fill="#ff3b3b"/><rect x="65" y="60" width="52" height="40" rx="4" fill="#e8c39e" stroke="#3a3a3a" stroke-width="4"/><rect x="62" y="52" width="58" height="12" rx="3" fill="#d4a373" stroke="#3a3a3a" stroke-width="4"/><circle cx="80" cy="78" r="7" fill="#ff6b6b" stroke="#3a3a3a" stroke-width="3"/><circle cx="93" cy="78" r="7" fill="#ff6b6b" stroke="#3a3a3a" stroke-width="3"/><circle cx="106" cy="78" r="7" fill="#ff6b6b" stroke="#3a3a3a" stroke-width="3"/></svg>`,
+  fat: `<svg viewBox="0 0 120 120"><circle cx="26" cy="24" r="10" fill="#ffe0b3" stroke="#3a3a3a" stroke-width="4"/><ellipse cx="26" cy="60" rx="9" ry="24" fill="#8ecbff" stroke="#3a3a3a" stroke-width="4"/><circle cx="84" cy="22" r="12" fill="#ffe0b3" stroke="#3a3a3a" stroke-width="4"/><ellipse cx="84" cy="66" rx="26" ry="28" fill="#8ecbff" stroke="#3a3a3a" stroke-width="4"/><ellipse cx="84" cy="66" rx="33" ry="35" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
+};
+function iconHTML(word, cls){
+  if(word.img) return `<span class="${cls} img-icon"><img src="${word.img}" alt="${word.en}"></span>`;
+  if(word.emoji) return `<span class="${cls}">${word.emoji}</span>`;
+  if(word.icon && ICONS[word.icon]) return `<span class="${cls} svg-icon">${ICONS[word.icon]}</span>`;
+  return '';
+}
+
+/* ---------- 星星儲存（精熟制：每個單字最多2顆＝字卡+圖卡，每個句子最多1顆，不會無限累加） ---------- */
+function getMasteryMap(){
+  try{ return JSON.parse(localStorage.getItem('osmond_mastery')||'{}'); }
+  catch(e){ return {}; }
+}
+function getLessonMastery(idx){
+  const m = getMasteryMap();
+  return m[idx] || { word:{}, picture:{}, sentence:{} };
+}
+function markMastered(idx, kind, key){
+  const m = getMasteryMap();
+  if(!m[idx]) m[idx] = { word:{}, picture:{}, sentence:{} };
+  if(m[idx][kind][key]) return false;
+  m[idx][kind][key] = true;
+  localStorage.setItem('osmond_mastery', JSON.stringify(m));
+  return true;
+}
+function getLessonStars(idx){
+  const lm = getLessonMastery(idx);
+  return Object.keys(lm.word).length + Object.keys(lm.picture).length + Object.keys(lm.sentence).length;
+}
+function getLessonMaxStars(idx){
+  return buildLessonWordPool(idx).length * 2 + buildLessonSentencePool(idx).length;
+}
+function getTotalStars(){
+  return LESSONS.reduce((sum,_,i)=>sum+getLessonStars(i), 0);
+}
+function getTotalMaxStars(){
+  return LESSONS.reduce((sum,_,i)=>sum+getLessonMaxStars(i), 0);
+}
+
+/* ---------- TTS ---------- */
+let voices = [];
+function loadVoices(){ voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; }
+if('speechSynthesis' in window){
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US';
+  u.rate = 0.85;
+  const v = voices.find(v=>v.lang && v.lang.startsWith('en'));
+  if(v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+
+/* ---------- confetti ---------- */
+function confettiBurst(){
+  const emojis = ['⭐','🎉','✨','🌟','🎈'];
+  for(let i=0;i<24;i++){
+    const el = document.createElement('div');
+    el.className='confetti';
+    el.textContent = emojis[Math.floor(Math.random()*emojis.length)];
+    el.style.left = Math.random()*100+'vw';
+    el.style.animationDuration = (2+Math.random()*1.5)+'s';
+    el.style.fontSize = (1.2+Math.random()*1.4)+'rem';
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(), 3800);
+  }
+}
+
+/* ---------- 狀態機 ---------- */
+let state = { screen:'home', lessonIdx:0, dayKey:null, items:[], pos:0, game:null };
+
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+function buildDayItems(lessonIdx, dayKey){
+  const lesson = LESSONS[lessonIdx];
+  if(dayKey === 'E'){
+    // 複習日：整合週一到週四的所有單字與句子
+    let words=[], sentences=[];
+    DAY_KEYS.forEach(k=>{
+      words = words.concat(lesson.days[k].words);
+      sentences = sentences.concat(lesson.days[k].sentences);
+    });
+    return { words, sentences };
+  }
+  const d = lesson.days[dayKey];
+  return { words: d.words, sentences: d.sentences };
+}
+
+function buildLessonWordPool(lessonIdx){
+  let words=[];
+  DAY_KEYS.forEach(k=>{ words = words.concat(LESSONS[lessonIdx].days[k].words); });
+  return words;
+}
+
+function buildLessonSentencePool(lessonIdx){
+  let sentences=[];
+  DAY_KEYS.forEach(k=>{ sentences = sentences.concat(LESSONS[lessonIdx].days[k].sentences); });
+  return sentences;
+}
+
+function goHome(){ state = {screen:'home', lessonIdx:0, dayKey:null, items:[], pos:0, game:null}; render(); }
+function goLesson(idx){ state.screen='lesson'; state.lessonIdx=idx; render(); }
+function goReviewMenu(){ state.screen='reviewMenu'; render(); }
+function goGameMenu(){ state.screen='gameMenu'; render(); }
+
+/* ---------- 複習卡片（純聽讀，不計星星） ---------- */
+function goReview(dayKey){
+  const data = buildDayItems(state.lessonIdx, dayKey);
+  const items = [
+    ...data.words.map(w=>({type:'word', ...w})),
+    ...data.sentences.map(s=>({type:'sentence', en:s}))
+  ];
+  state.screen='review'; state.dayKey=dayKey; state.items=items; state.pos=0;
+  render();
+}
+function nextReview(){
+  if(state.pos < state.items.length-1){ state.pos += 1; render(); }
+  else { state.screen='reviewEnd'; render(); }
+}
+function prevReview(){
+  if(state.pos>0){ state.pos-=1; render(); }
+}
+
+/* ---------- 聽力配對遊戲（答對才給星星） ---------- */
+function goGame(){
+  const pool = buildLessonWordPool(state.lessonIdx);
+  const roundSize = Math.min(10, pool.length);
+  const order = shuffle(pool).slice(0, roundSize);
+  state.screen = 'game';
+  state.game = { pool, order, qIndex:0, sessionStars:0, current:null, wordChoices:[], pictureChoices:[], wordDone:false, pictureDone:false, wordLocked:false, pictureLocked:false, wordMistake:false, pictureMistake:false };
+  setupGameQuestion();
+  render();
+  setTimeout(()=>speak(state.game.current.en), 300);
+}
+function setupGameQuestion(){
+  const g = state.game;
+  const current = g.order[g.qIndex];
+  const distractors = shuffle(g.pool.filter(w=>w.en!==current.en)).slice(0,3);
+  const optionSet = [current, ...distractors];
+  g.current = current;
+  g.wordChoices = shuffle(optionSet);
+  g.pictureChoices = shuffle(optionSet);
+  g.wordDone = false;
+  g.pictureDone = false;
+  g.wordLocked = false;
+  g.pictureLocked = false;
+  g.wordMistake = false;
+  g.pictureMistake = false;
+}
+function handleAnswer(btnEl, en, kind){
+  const g = state.game;
+  const doneKey = kind==='word' ? 'wordDone' : 'pictureDone';
+  const lockKey = kind==='word' ? 'wordLocked' : 'pictureLocked';
+  const mistakeKey = kind==='word' ? 'wordMistake' : 'pictureMistake';
+  if(g[doneKey] || g[lockKey]) return;
+  if(en === g.current.en){
+    g[lockKey] = true;
+    btnEl.classList.add('correct');
+    if(!g[mistakeKey]){
+      markMastered(state.lessonIdx, kind, g.current.en);
+      g.sessionStars += 1;
+      const badge = document.querySelector('.score-badge');
+      if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+    }
+    setTimeout(()=>{
+      g[doneKey] = true;
+      if(g.wordDone && g.pictureDone){
+        if(g.qIndex < g.order.length-1){
+          g.qIndex += 1; setupGameQuestion(); render();
+          setTimeout(()=>speak(g.current.en), 300);
+        } else {
+          state.screen='gameEnd'; render(); confettiBurst();
+        }
+      } else {
+        render();
+      }
+    }, 600);
+  } else {
+    g[mistakeKey] = true;
+    btnEl.classList.add('wrong');
+    setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
+  }
+}
+
+/* ---------- 句子聽力遊戲（答對才給星星） ---------- */
+function goSentenceGame(){
+  const pool = buildLessonSentencePool(state.lessonIdx);
+  const roundSize = Math.min(8, pool.length);
+  const order = shuffle(pool).slice(0, roundSize);
+  state.screen = 'sentenceGame';
+  state.sentenceGame = { pool, order, qIndex:0, sessionStars:0, current:null, choices:[], done:false, locked:false, mistake:false };
+  setupSentenceQuestion();
+  render();
+  setTimeout(()=>speak(state.sentenceGame.current), 300);
+}
+function setupSentenceQuestion(){
+  const g = state.sentenceGame;
+  const current = g.order[g.qIndex];
+  const distractors = shuffle(g.pool.filter(s=>s!==current)).slice(0,3);
+  g.current = current;
+  g.choices = shuffle([current, ...distractors]);
+  g.done = false;
+  g.locked = false;
+  g.mistake = false;
+}
+function handleSentenceAnswer(btnEl, idx){
+  const g = state.sentenceGame;
+  if(g.done || g.locked) return;
+  const text = g.choices[idx];
+  if(text === g.current){
+    g.locked = true;
+    btnEl.classList.add('correct');
+    if(!g.mistake){
+      markMastered(state.lessonIdx, 'sentence', g.current);
+      g.sessionStars += 1;
+      const badge = document.querySelector('.score-badge');
+      if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+    }
+    setTimeout(()=>{
+      g.done = true;
+      if(g.qIndex < g.order.length-1){
+        g.qIndex += 1; setupSentenceQuestion(); render();
+        setTimeout(()=>speak(g.current), 300);
+      } else {
+        state.screen='sentenceGameEnd'; render(); confettiBurst();
+      }
+    }, 600);
+  } else {
+    g.mistake = true;
+    btnEl.classList.add('wrong');
+    setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
+  }
+}
+
+/* ---------- 畫面渲染 ---------- */
+function render(){
+  const app = document.getElementById('app');
+  if(state.screen==='home') app.innerHTML = renderHome();
+  else if(state.screen==='lesson') app.innerHTML = renderLesson();
+  else if(state.screen==='reviewMenu') app.innerHTML = renderReviewMenu();
+  else if(state.screen==='gameMenu') app.innerHTML = renderGameMenu();
+  else if(state.screen==='review') app.innerHTML = renderReview();
+  else if(state.screen==='reviewEnd') app.innerHTML = renderReviewEnd();
+  else if(state.screen==='game') app.innerHTML = renderGame();
+  else if(state.screen==='gameEnd') app.innerHTML = renderGameEnd();
+  else if(state.screen==='sentenceGame') app.innerHTML = renderSentenceGame();
+  else if(state.screen==='sentenceGameEnd') app.innerHTML = renderSentenceGameEnd();
+  bindEvents();
+  if(state.screen==='review'){
+    const item = state.items[state.pos];
+    setTimeout(()=>speak(item.en), 300);
+  }
+}
+
+function renderHome(){
+  let cards = LESSONS.map((l,i)=>`
+    <button class="card-btn ${l.color}" data-action="lesson" data-idx="${i}">
+      <span class="emoji">${l.emoji}</span>
+      <span>${l.title}</span>
+      <span class="lesson-stars">⭐ ${getLessonStars(i)} / ${getLessonMaxStars(i)}</span>
+    </button>
+  `).join('');
+  return `
+    <div class="screen">
+      <h1>🌈 Osmond 英文單字遊戲</h1>
+      <div class="stars-total">⭐ 累積總星星：${getTotalStars()} / ${getTotalMaxStars()}</div>
+      <h2>選一課開始玩吧！</h2>
+      <div class="grid">${cards}</div>
+    </div>
+  `;
+}
+
+function renderLesson(){
+  const lesson = LESSONS[state.lessonIdx];
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="home">⬅️ 回首頁</button>
+      <h1>${lesson.emoji} ${lesson.title}</h1>
+      <div class="lesson-stars" style="font-size:1.1rem; margin-bottom:16px;">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}</div>
+      <h2>想先複習，還是直接玩遊戲？</h2>
+      <div class="grid">
+        <button class="card-btn l0" data-action="review-menu">
+          <span class="emoji">📖</span>
+          <span>先複習</span>
+        </button>
+        <button class="card-btn l4" data-action="game-menu">
+          <span class="emoji">🎮</span>
+          <span>直接玩遊戲</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderReviewMenu(){
+  const lesson = LESSONS[state.lessonIdx];
+  const dayNames = {A:"星期一",B:"星期二",C:"星期三",D:"星期四",E:"複習日"};
+  let btns = [...DAY_KEYS,"E"].map(k=>`
+    <button class="card-btn day${k}" data-action="review" data-key="${k}">
+      <span class="emoji">${DAY_ICON[k]}</span>
+      <span>${dayNames[k]}${k==='E'?' 全週複習':''}</span>
+    </button>
+  `).join('');
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <h1>${lesson.emoji} ${lesson.title}</h1>
+      <h2>📖 選一天來聽發音、複習單字和句子</h2>
+      <div class="grid">${btns}</div>
+    </div>
+  `;
+}
+
+function renderGameMenu(){
+  const lesson = LESSONS[state.lessonIdx];
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <h1>${lesson.emoji} ${lesson.title}</h1>
+      <h2>🎮 選一個遊戲，答對拿星星！</h2>
+      <button class="game-btn" data-action="game">🎮 聽力配對遊戲（本週全部單字，答對拿星星！）</button>
+      <button class="game-btn" data-action="sentence-game">🗣️ 句子聽力遊戲（本週全部句子，答對拿星星！）</button>
+    </div>
+  `;
+}
+
+function renderReview(){
+  const item = state.items[state.pos];
+  let dots = state.items.map((it,i)=>{
+    let cls='dot'+(i<state.pos?' done':'')+(i===state.pos?' current':'');
+    return `<div class="${cls}"></div>`;
+  }).join('');
+
+  let cardInner;
+  if(item.type==='word'){
+    cardInner = `
+      ${iconHTML(item, 'emoji-big')}
+      <div class="tag">單字 Word</div>
+      <div class="word-en">${item.en}</div>
+      <div class="word-zh">${item.zh}</div>
+    `;
+  } else {
+    cardInner = `
+      <div class="emoji-big">💬</div>
+      <div class="tag">句子 Sentence</div>
+      <div class="sentence-en">${item.en}</div>
+    `;
+  }
+
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <div class="progress">${dots}</div>
+      <div class="practice-wrap">
+        <div class="flashcard">${cardInner}</div>
+        <div class="btn-row">
+          <button class="round-btn prev-btn" data-action="prev" ${state.pos===0?'disabled style="opacity:.3"':''}>⬅️</button>
+          <button class="round-btn speak-btn" data-action="speak">🔊</button>
+          <button class="round-btn next-btn" data-action="next">➡️</button>
+        </div>
+        <div class="hint">聽發音，跟著大聲唸出來，按➡️看下一張</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderReviewEnd(){
+  return `
+    <div class="screen">
+      <div class="end-wrap">
+        <div class="end-stars">📖✨📖</div>
+        <h1>複習完成！</h1>
+        <h2>要不要玩聽力配對遊戲賺星星呢？</h2>
+        <div>
+          <button class="big-btn" style="background:var(--purple)" data-action="game">🎮 單字遊戲</button>
+          <button class="big-btn" style="background:var(--orange)" data-action="sentence-game">🗣️ 句子遊戲</button>
+          <button class="big-btn" style="background:var(--green)" data-action="replay-review">🔁 再複習一次</button>
+          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 選別的星期</button>
+          <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderGame(){
+  const g = state.game;
+  let dots = g.order.map((it,i)=>{
+    let cls='dot'+(i<g.qIndex?' done':'')+(i===g.qIndex?' current':'');
+    return `<div class="${cls}"></div>`;
+  }).join('');
+
+  function choiceButtons(choices, kind, done){
+    return choices.map(c=>{
+      const isCorrect = c.en === g.current.en;
+      let cls = 'choice-btn ' + (kind==='word' ? 'text-only' : 'icon-only');
+      if(done) cls += isCorrect ? ' correct' : ' disabled-choice';
+      const inner = kind==='word' ? `<span>${c.en}</span>` : iconHTML(c, 'game-emoji');
+      const attrs = done ? '' : `data-action="answer" data-en="${c.en}" data-kind="${kind}"`;
+      return `<button class="${cls}" ${attrs}>${inner}</button>`;
+    }).join('');
+  }
+
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <div class="score-badge">⭐ ${g.sessionStars}</div>
+      <div class="progress">${dots}</div>
+      <div class="practice-wrap">
+        <h2>🎧 聽聽看，選出正確的單字卡和圖片卡！</h2>
+        <button class="big-speaker" data-action="speak-game">🔊</button>
+        <div class="game-section">
+          <div class="section-label">${g.wordDone?'✅ ':''}選單字</div>
+          <div class="choice-grid">${choiceButtons(g.wordChoices, 'word', g.wordDone)}</div>
+        </div>
+        <div class="game-section">
+          <div class="section-label">${g.pictureDone?'✅ ':''}選圖片</div>
+          <div class="choice-grid">${choiceButtons(g.pictureChoices, 'picture', g.pictureDone)}</div>
+        </div>
+        <div class="hint">先聽聲音，兩邊都選對才會進下一題</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderGameEnd(){
+  const g = state.game;
+  return `
+    <div class="screen">
+      <div class="end-wrap">
+        <div class="end-stars">🌟🎮🌟</div>
+        <h1>遊戲結束！</h1>
+        <h2>完成了 ${g.order.length} 題配對，獲得 ${g.sessionStars} 顆星星！</h2>
+        <div class="stars-total">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}　|　全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
+        <div>
+          <button class="big-btn" style="background:var(--purple)" data-action="game">🔁 再玩一次</button>
+          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 回課程選單</button>
+          <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSentenceGame(){
+  const g = state.sentenceGame;
+  let dots = g.order.map((it,i)=>{
+    let cls='dot'+(i<g.qIndex?' done':'')+(i===g.qIndex?' current':'');
+    return `<div class="${cls}"></div>`;
+  }).join('');
+  let choices = g.choices.map((c,i)=>{
+    const isCorrect = c === g.current;
+    let cls = 'choice-btn sentence-choice';
+    if(g.done) cls += isCorrect ? ' correct' : ' disabled-choice';
+    const attrs = g.done ? '' : `data-action="sentence-answer" data-idx="${i}"`;
+    return `<button class="${cls}" ${attrs}><span>${c}</span></button>`;
+  }).join('');
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <div class="score-badge">⭐ ${g.sessionStars}</div>
+      <div class="progress">${dots}</div>
+      <div class="practice-wrap">
+        <h2>🗣️ 聽聽看，選出正確的句子！</h2>
+        <button class="big-speaker" data-action="speak-sentence-game">🔊</button>
+        <div class="sentence-choice-list">${choices}</div>
+        <div class="hint">先聽聲音，再選出對應的句子卡</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSentenceGameEnd(){
+  const g = state.sentenceGame;
+  return `
+    <div class="screen">
+      <div class="end-wrap">
+        <div class="end-stars">🌟🗣️🌟</div>
+        <h1>句子遊戲結束！</h1>
+        <h2>完成了 ${g.order.length} 題，獲得 ${g.sessionStars} 顆星星！</h2>
+        <div class="stars-total">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}　|　全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
+        <div>
+          <button class="big-btn" style="background:var(--purple)" data-action="sentence-game">🔁 再玩一次</button>
+          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 回課程選單</button>
+          <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindEvents(){
+  document.querySelectorAll('[data-action]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const action = el.dataset.action;
+      if(action==='lesson') goLesson(parseInt(el.dataset.idx,10));
+      else if(action==='review-menu') goReviewMenu();
+      else if(action==='game-menu') goGameMenu();
+      else if(action==='review') goReview(el.dataset.key);
+      else if(action==='replay-review') goReview(state.dayKey);
+      else if(action==='home') goHome();
+      else if(action==='lesson-back') goLesson(state.lessonIdx);
+      else if(action==='next') nextReview();
+      else if(action==='prev') prevReview();
+      else if(action==='speak'){ const item = state.items[state.pos]; speak(item.en); }
+      else if(action==='game') goGame();
+      else if(action==='speak-game'){ speak(state.game.current.en); }
+      else if(action==='answer') handleAnswer(el, el.dataset.en, el.dataset.kind);
+      else if(action==='sentence-game') goSentenceGame();
+      else if(action==='speak-sentence-game'){ speak(state.sentenceGame.current); }
+      else if(action==='sentence-answer') handleSentenceAnswer(el, parseInt(el.dataset.idx,10));
+    });
+  });
+}
+
+render();
+</script>
+</body>
+</html>
