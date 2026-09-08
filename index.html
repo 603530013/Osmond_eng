@@ -432,6 +432,7 @@ function setupQuestion(){
     g.placedTokens = [];
     g.sentenceMistake = false;
     g.sentenceDone = false;
+    g.sentenceLocked = false;
   } else {
     const current = item.data;
     const distractors = shuffle(g.sentencePool.filter(s=>s!==current)).slice(0,3);
@@ -478,14 +479,16 @@ function handleAnswer(btnEl, en, kind){
 }
 function handleSentenceTap(btnEl, idx){
   const g = state.game;
-  if(g.sentenceDone) return;
+  if(g.sentenceDone || g.sentenceLocked) return;
   const expectedIdx = g.placedTokens.length;
   if(idx === expectedIdx){
+    g.sentenceLocked = true;
     btnEl.classList.add('correct');
     setTimeout(()=>{
       const token = g.sentenceTokens.find(t=>t.idx===idx);
       g.placedTokens.push(token);
       g.sentenceTokens = g.sentenceTokens.filter(t=>t.idx!==idx);
+      g.sentenceLocked = false;
       if(g.sentenceTokens.length === 0){
         g.sentenceDone = true;
         if(!g.sentenceMistake){
