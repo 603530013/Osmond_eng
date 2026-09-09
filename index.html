@@ -718,6 +718,7 @@ function setupQuestion(){
     const sentence = item.data;
     const tokens = sentence.split(' ');
     g.current = sentence;
+    g.originalWords = tokens;
     g.sentenceTokens = shuffle(tokens.map((t,i)=>({text:t, idx:i})));
     g.placedTokens = [];
     g.sentenceMistake = false;
@@ -771,11 +772,13 @@ function handleSentenceTap(btnEl, idx){
   const g = state.game;
   if(g.sentenceDone || g.sentenceLocked) return;
   const expectedIdx = g.placedTokens.length;
-  if(idx === expectedIdx){
+  const expectedWord = g.originalWords[expectedIdx];
+  const tapped = g.sentenceTokens.find(t=>t.idx===idx);
+  if(tapped && tapped.text === expectedWord){
     g.sentenceLocked = true;
     btnEl.classList.add('correct');
     setTimeout(()=>{
-      const token = g.sentenceTokens.find(t=>t.idx===idx);
+      const token = tapped;
       g.placedTokens.push(token);
       g.sentenceTokens = g.sentenceTokens.filter(t=>t.idx!==idx);
       g.sentenceLocked = false;
