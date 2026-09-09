@@ -112,6 +112,11 @@
   .choice-btn.sentence-tile{font-size:1.4rem; padding:14px 22px; font-weight:bold;}
   .sentence-choice-list{display:flex; flex-direction:column; gap:14px; width:100%; max-width:560px;}
   .choice-btn.sentence-choice{font-size:1.3rem; padding:20px 18px; text-align:left; display:block;}
+  .qa-question-box{
+    background:#eaf3ff; border:3px solid var(--blue); border-radius:18px; padding:18px 24px;
+    font-size:1.5rem; font-weight:bold; color:var(--ink); width:100%; max-width:560px;
+    text-align:center; margin-bottom:20px;
+  }
   .game-emoji{font-size:2.6rem;}
   .svg-icon{display:inline-flex;}
   .svg-icon svg{width:100%; height:100%;}
@@ -500,11 +505,12 @@ function getMasteryMap(){
 }
 function getLessonMastery(idx){
   const m = getMasteryMap();
-  return m[idx] || { word:{}, picture:{}, sentence:{} };
+  return m[idx] || { word:{}, picture:{}, sentence:{}, qa:{} };
 }
 function markMastered(idx, kind, key){
   const m = getMasteryMap();
-  if(!m[idx]) m[idx] = { word:{}, picture:{}, sentence:{} };
+  if(!m[idx]) m[idx] = { word:{}, picture:{}, sentence:{}, qa:{} };
+  if(!m[idx][kind]) m[idx][kind] = {};
   if(m[idx][kind][key]) return false;
   m[idx][kind][key] = true;
   localStorage.setItem('osmond_mastery', JSON.stringify(m));
@@ -512,10 +518,10 @@ function markMastered(idx, kind, key){
 }
 function getLessonStars(idx){
   const lm = getLessonMastery(idx);
-  return Object.keys(lm.word).length + Object.keys(lm.picture).length + Object.keys(lm.sentence).length;
+  return Object.keys(lm.word).length + Object.keys(lm.picture).length + Object.keys(lm.sentence).length + Object.keys(lm.qa||{}).length;
 }
 function getLessonMaxStars(idx){
-  return buildLessonWordPool(idx).length * 2 + buildLessonSentencePool(idx).length;
+  return buildLessonWordPool(idx).length * 2 + buildLessonSentencePool(idx).length + buildQAPairs(idx,'ALL').length;
 }
 function getTotalStars(){
   return LESSONS.reduce((sum,_,i)=>sum+getLessonStars(i), 0);
@@ -605,6 +611,33 @@ function buildSentencePool(lessonIdx, dayKey){
   return LESSONS[lessonIdx].days[dayKey].sentences;
 }
 
+function buildDayQAPairs(lessonIdx, dayKey){
+  const sentences = LESSONS[lessonIdx].days[dayKey].sentences;
+  const pairs = [];
+  for(let i=0; i+1<sentences.length; i+=2){
+    pairs.push({q:sentences[i], a:sentences[i+1]});
+  }
+  return pairs;
+}
+function buildQAPairs(lessonIdx, dayKey){
+  if(dayKey === 'ALL'){
+    let pairs = [];
+    DAY_KEYS.forEach(k=>{ pairs = pairs.concat(buildDayQAPairs(lessonIdx, k)); });
+    return pairs;
+  }
+  return buildDayQAPairs(lessonIdx, dayKey);
+}
+function buildOtherLessonAnswers(excludeLessonIdx){
+  let answers = [];
+  LESSONS.forEach((lesson,i)=>{
+    if(i === excludeLessonIdx) return;
+    DAY_KEYS.forEach(k=>{
+      buildDayQAPairs(i,k).forEach(p=>answers.push(p.a));
+    });
+  });
+  return answers;
+}
+
 function goHome(){ state = {screen:'home', lessonIdx:0, dayKey:null, items:[], pos:0, game:null}; render(); }
 function goLesson(idx){ state.screen='lesson'; state.lessonIdx=idx; render(); }
 function goReviewMenu(){ state.screen='reviewMenu'; render(); }
@@ -633,6 +666,8 @@ function goGame(dayKey){
   dayKey = dayKey || 'ALL';
   const wordPool = buildWordPool(state.lessonIdx, dayKey);
   const sentencePool = buildSentencePool(state.lessonIdx, dayKey);
+  const qaPairs = buildQAPairs(state.lessonIdx, dayKey);
+  const otherAnswers = buildOtherLessonAnswers(state.lessonIdx);
   const wordRoundSize = Math.min(10, wordPool.length);
   const sentenceRoundSize = Math.min(8, sentencePool.length);
   const wordItems = shuffle(wordPool).slice(0, wordRoundSize).map(w=>({kind:'word', data:w}));
@@ -640,9 +675,10 @@ function goGame(dayKey){
     {kind:'sentence', subKind:'choice', data:s},
     {kind:'sentence', subKind:'order', data:s}
   ]);
-  const order = shuffle([...wordItems, ...sentenceItems]);
+  const qaItems = shuffle(qaPairs).map(p=>({kind:'qa', data:p}));
+  const order = shuffle([...wordItems, ...sentenceItems, ...qaItems]);
   state.screen = 'game';
-  state.game = { dayKey, wordPool, sentencePool, order, qIndex:0, sessionStars:0 };
+  state.game = { dayKey, wordPool, sentencePool, otherAnswers, order, qIndex:0, sessionStars:0 };
   setupQuestion();
   render();
   speakCurrentQuestion();
@@ -651,6 +687,7 @@ function speakCurrentQuestion(){
   const g = state.game;
   const item = g.order[g.qIndex];
   if(item.kind==='word') setTimeout(()=>speak(item.data.en), 300);
+  else if(item.kind==='qa') setTimeout(()=>speak(item.data.q, SENTENCE_RATE), 300);
   else setTimeout(()=>speak(item.data, SENTENCE_RATE), 300);
 }
 function setupQuestion(){
@@ -669,6 +706,14 @@ function setupQuestion(){
     g.pictureLocked = false;
     g.wordMistake = false;
     g.pictureMistake = false;
+  } else if(item.kind === 'qa'){
+    const pair = item.data;
+    const distractors = shuffle(g.otherAnswers).slice(0,3);
+    g.current = pair;
+    g.qaChoices = shuffle([pair.a, ...distractors]);
+    g.qaDone = false;
+    g.qaLocked = false;
+    g.qaMistake = false;
   } else if(item.subKind === 'order'){
     const sentence = item.data;
     const tokens = sentence.split(' ');
@@ -773,6 +818,29 @@ function handleSentenceChoiceTap(btnEl, idx){
     }, 600);
   } else {
     g.sentenceChoiceMistake = true;
+    btnEl.classList.add('wrong');
+    setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
+  }
+}
+function handleQATap(btnEl, idx){
+  const g = state.game;
+  if(g.qaDone || g.qaLocked) return;
+  const text = g.qaChoices[idx];
+  if(text === g.current.a){
+    g.qaLocked = true;
+    btnEl.classList.add('correct');
+    if(!g.qaMistake){
+      markMastered(state.lessonIdx, 'qa', g.current.q);
+      g.sessionStars += 1;
+      const badge = document.querySelector('.score-badge');
+      if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+    }
+    setTimeout(()=>{
+      g.qaDone = true;
+      advanceQuestion();
+    }, 600);
+  } else {
+    g.qaMistake = true;
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -994,6 +1062,23 @@ function renderSentenceChoiceQuestion(g){
   `;
 }
 
+function renderQAQuestion(g){
+  let choices = g.qaChoices.map((c,i)=>{
+    const isCorrect = c === g.current.a;
+    let cls = 'choice-btn sentence-choice';
+    if(g.qaDone) cls += isCorrect ? ' correct' : ' disabled-choice';
+    const attrs = g.qaDone ? '' : `data-action="qa-tap" data-idx="${i}"`;
+    return `<button class="${cls}" ${attrs}><span>${c}</span></button>`;
+  }).join('');
+  return `
+    <h2>💬 看看問題，選出正確的回答！</h2>
+    <button class="big-speaker" data-action="speak-current">🔊</button>
+    <div class="qa-question-box">${g.current.q}</div>
+    <div class="sentence-choice-list">${choices}</div>
+    <div class="hint">先讀讀看/聽聽看問題，再選出正確的回答</div>
+  `;
+}
+
 function renderGame(){
   const g = state.game;
   const item = g.order[g.qIndex];
@@ -1003,6 +1088,7 @@ function renderGame(){
   }).join('');
   let body;
   if(item.kind==='word') body = renderWordQuestion(g);
+  else if(item.kind==='qa') body = renderQAQuestion(g);
   else if(item.subKind==='order') body = renderSentenceOrderQuestion(g);
   else body = renderSentenceChoiceQuestion(g);
 
@@ -1026,7 +1112,7 @@ function renderGameEnd(){
       <div class="end-wrap">
         <div class="end-stars">🌟🎉🌟</div>
         <h1>遊戲結束！</h1>
-        <h2>完成了 ${g.order.length} 題（單字＋句子），獲得 ${g.sessionStars} 顆星星！</h2>
+        <h2>完成了 ${g.order.length} 題（單字＋句子＋問答），獲得 ${g.sessionStars} 顆星星！</h2>
         <div class="stars-total">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}　|　全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
         <div>
           <button class="big-btn" style="background:var(--purple)" data-action="game">🔁 再玩一次</button>
@@ -1057,11 +1143,14 @@ function bindEvents(){
       else if(action==='game') goGame(state.game ? state.game.dayKey : 'ALL');
       else if(action==='speak-current'){
         const item = state.game.order[state.game.qIndex];
-        speak(item.kind==='word' ? item.data.en : item.data, item.kind==='word' ? WORD_RATE : SENTENCE_RATE);
+        if(item.kind==='word') speak(item.data.en, WORD_RATE);
+        else if(item.kind==='qa') speak(item.data.q, SENTENCE_RATE);
+        else speak(item.data, SENTENCE_RATE);
       }
       else if(action==='answer') handleAnswer(el, el.dataset.en, el.dataset.kind);
       else if(action==='sentence-tap') handleSentenceTap(el, parseInt(el.dataset.idx,10));
       else if(action==='sentence-choice-tap') handleSentenceChoiceTap(el, parseInt(el.dataset.idx,10));
+      else if(action==='qa-tap') handleQATap(el, parseInt(el.dataset.idx,10));
     });
   });
 }
