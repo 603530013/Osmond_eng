@@ -523,6 +523,21 @@ function getLessonStars(idx){
 function getLessonMaxStars(idx){
   return buildLessonWordPool(idx).length * 2 + buildLessonSentencePool(idx).length + buildQAPairs(idx,'ALL').length;
 }
+function getSessionMaxStars(g){
+  const seenSentence = new Set();
+  const seenQA = new Set();
+  let max = 0;
+  g.order.forEach(item=>{
+    if(item.kind==='word'){
+      max += 2;
+    } else if(item.kind==='qa'){
+      if(!seenQA.has(item.data.q)){ seenQA.add(item.data.q); max += 1; }
+    } else {
+      if(!seenSentence.has(item.data)){ seenSentence.add(item.data); max += 1; }
+    }
+  });
+  return max;
+}
 function getTotalStars(){
   return LESSONS.reduce((sum,_,i)=>sum+getLessonStars(i), 0);
 }
@@ -666,6 +681,7 @@ function goGame(dayKey){
   dayKey = dayKey || 'ALL';
   const wordPool = buildWordPool(state.lessonIdx, dayKey);
   const sentencePool = buildSentencePool(state.lessonIdx, dayKey);
+  const lessonSentencePool = buildLessonSentencePool(state.lessonIdx);
   const qaPairs = buildQAPairs(state.lessonIdx, dayKey);
   const otherAnswers = buildOtherLessonAnswers(state.lessonIdx);
   const wordRoundSize = Math.min(10, wordPool.length);
@@ -678,7 +694,7 @@ function goGame(dayKey){
   const qaItems = shuffle(qaPairs).map(p=>({kind:'qa', data:p}));
   const order = shuffle([...wordItems, ...sentenceItems, ...qaItems]);
   state.screen = 'game';
-  state.game = { dayKey, wordPool, sentencePool, otherAnswers, order, qIndex:0, sessionStars:0 };
+  state.game = { dayKey, wordPool, sentencePool, lessonSentencePool, otherAnswers, order, qIndex:0, sessionStars:0 };
   setupQuestion();
   render();
   speakCurrentQuestion();
@@ -726,7 +742,7 @@ function setupQuestion(){
     g.sentenceLocked = false;
   } else {
     const current = item.data;
-    const distractors = shuffle(g.sentencePool.filter(s=>s!==current)).slice(0,3);
+    const distractors = shuffle(g.lessonSentencePool.filter(s=>s!==current)).slice(0,3);
     g.current = current;
     g.sentenceChoices = shuffle([current, ...distractors]);
     g.sentenceChoiceDone = false;
@@ -752,10 +768,12 @@ function handleAnswer(btnEl, en, kind){
     g[lockKey] = true;
     btnEl.classList.add('correct');
     if(!g[mistakeKey]){
-      markMastered(state.lessonIdx, kind, g.current.en);
-      g.sessionStars += 1;
-      const badge = document.querySelector('.score-badge');
-      if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+      const gained = markMastered(state.lessonIdx, kind, g.current.en);
+      if(gained){
+        g.sessionStars += 1;
+        const badge = document.querySelector('.score-badge');
+        if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+      }
     }
     setTimeout(()=>{
       g[doneKey] = true;
@@ -785,10 +803,12 @@ function handleSentenceTap(btnEl, idx){
       if(g.sentenceTokens.length === 0){
         g.sentenceDone = true;
         if(!g.sentenceMistake){
-          markMastered(state.lessonIdx, 'sentence', g.current);
-          g.sessionStars += 1;
-          const badge = document.querySelector('.score-badge');
-          if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+          const gained = markMastered(state.lessonIdx, 'sentence', g.current);
+          if(gained){
+            g.sessionStars += 1;
+            const badge = document.querySelector('.score-badge');
+            if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+          }
         }
         render();
         setTimeout(()=>advanceQuestion(), 700);
@@ -810,10 +830,12 @@ function handleSentenceChoiceTap(btnEl, idx){
     g.sentenceChoiceLocked = true;
     btnEl.classList.add('correct');
     if(!g.sentenceChoiceMistake){
-      markMastered(state.lessonIdx, 'sentence', g.current);
-      g.sessionStars += 1;
-      const badge = document.querySelector('.score-badge');
-      if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+      const gained = markMastered(state.lessonIdx, 'sentence', g.current);
+      if(gained){
+        g.sessionStars += 1;
+        const badge = document.querySelector('.score-badge');
+        if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+      }
     }
     setTimeout(()=>{
       g.sentenceChoiceDone = true;
@@ -833,10 +855,12 @@ function handleQATap(btnEl, idx){
     g.qaLocked = true;
     btnEl.classList.add('correct');
     if(!g.qaMistake){
-      markMastered(state.lessonIdx, 'qa', g.current.q);
-      g.sessionStars += 1;
-      const badge = document.querySelector('.score-badge');
-      if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+      const gained = markMastered(state.lessonIdx, 'qa', g.current.q);
+      if(gained){
+        g.sessionStars += 1;
+        const badge = document.querySelector('.score-badge');
+        if(badge) badge.textContent = '⭐ ' + g.sessionStars;
+      }
     }
     setTimeout(()=>{
       g.qaDone = true;
@@ -1116,7 +1140,9 @@ function renderGameEnd(){
         <div class="end-stars">🌟🎉🌟</div>
         <h1>遊戲結束！</h1>
         <h2>完成了 ${g.order.length} 題（單字＋句子＋問答），獲得 ${g.sessionStars} 顆星星！</h2>
-        <div class="stars-total">⭐ 本課星星：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}　|　全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
+        <div class="stars-total">⭐ 今天：${g.sessionStars} / ${getSessionMaxStars(g)}</div>
+        <div class="stars-total">⭐ 這一課總共：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}</div>
+        <div class="stars-total">⭐ 全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
         <div>
           <button class="big-btn" style="background:var(--purple)" data-action="game">🔁 再玩一次</button>
           <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 回課程選單</button>
