@@ -498,7 +498,13 @@ function iconHTML(word, cls){
   return '';
 }
 
-/* ---------- 星星儲存（精熟制：每個單字最多2顆＝字卡+圖卡，每個句子最多1顆，不會無限累加） ---------- */
+/* ---------- 星星儲存（精熟制：每個單字最多2顆＝字卡+圖卡，每個句子最多1顆，不會無限累加；
+   答錯已精熟的內容會收回星星，記錄的是精熟日期而不是單純true/false，這樣「今天」可以直接
+   用日期比對算出來，不用另外維護一個累加計數器） ---------- */
+function getTodayDateStr(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function getMasteryMap(){
   try{ return JSON.parse(localStorage.getItem('osmond_mastery')||'{}'); }
   catch(e){ return {}; }
@@ -512,7 +518,14 @@ function markMastered(idx, kind, key){
   if(!m[idx]) m[idx] = { word:{}, picture:{}, sentence:{}, qa:{} };
   if(!m[idx][kind]) m[idx][kind] = {};
   if(m[idx][kind][key]) return false;
-  m[idx][kind][key] = true;
+  m[idx][kind][key] = getTodayDateStr();
+  localStorage.setItem('osmond_mastery', JSON.stringify(m));
+  return true;
+}
+function unmarkMastered(idx, kind, key){
+  const m = getMasteryMap();
+  if(!m[idx] || !m[idx][kind] || !m[idx][kind][key]) return false;
+  delete m[idx][kind][key];
   localStorage.setItem('osmond_mastery', JSON.stringify(m));
   return true;
 }
@@ -537,6 +550,22 @@ function getSessionMaxStars(g){
     }
   });
   return max;
+}
+function getScopeTodayStars(lessonIdx, dayKey){
+  const lm = getLessonMastery(lessonIdx);
+  const today = getTodayDateStr();
+  let count = 0;
+  buildWordPool(lessonIdx, dayKey).forEach(w=>{
+    if(lm.word[w.en] === today) count += 1;
+    if(lm.picture[w.en] === today) count += 1;
+  });
+  buildSentencePool(lessonIdx, dayKey).forEach(s=>{
+    if(lm.sentence[s] === today) count += 1;
+  });
+  buildQAPairs(lessonIdx, dayKey).forEach(p=>{
+    if((lm.qa||{})[p.q] === today) count += 1;
+  });
+  return count;
 }
 function getTotalStars(){
   return LESSONS.reduce((sum,_,i)=>sum+getLessonStars(i), 0);
@@ -782,6 +811,7 @@ function handleAnswer(btnEl, en, kind){
     }, 600);
   } else {
     g[mistakeKey] = true;
+    unmarkMastered(state.lessonIdx, kind, g.current.en);
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -818,6 +848,7 @@ function handleSentenceTap(btnEl, idx){
     }, 300);
   } else {
     g.sentenceMistake = true;
+    unmarkMastered(state.lessonIdx, 'sentence', g.current);
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -843,6 +874,7 @@ function handleSentenceChoiceTap(btnEl, idx){
     }, 600);
   } else {
     g.sentenceChoiceMistake = true;
+    unmarkMastered(state.lessonIdx, 'sentence', g.current);
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -868,6 +900,7 @@ function handleQATap(btnEl, idx){
     }, 600);
   } else {
     g.qaMistake = true;
+    unmarkMastered(state.lessonIdx, 'qa', g.current.q);
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -1140,7 +1173,7 @@ function renderGameEnd(){
         <div class="end-stars">🌟🎉🌟</div>
         <h1>遊戲結束！</h1>
         <h2>完成了 ${g.order.length} 題（單字＋句子＋問答），獲得 ${g.sessionStars} 顆星星！</h2>
-        <div class="stars-total">⭐ 今天：${g.sessionStars} / ${getSessionMaxStars(g)}</div>
+        <div class="stars-total">⭐ 今天：${getScopeTodayStars(state.lessonIdx, g.dayKey)} / ${getSessionMaxStars(g)}</div>
         <div class="stars-total">⭐ 這一課總共：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}</div>
         <div class="stars-total">⭐ 全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
         <div>
