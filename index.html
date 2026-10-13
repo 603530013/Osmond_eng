@@ -498,74 +498,37 @@ function iconHTML(word, cls){
   return '';
 }
 
-/* ---------- 星星儲存（精熟制：每個單字最多2顆＝字卡+圖卡，每個句子最多1顆，不會無限累加；
-   答錯已精熟的內容會收回星星，記錄的是精熟日期而不是單純true/false，這樣「今天」可以直接
-   用日期比對算出來，不用另外維護一個累加計數器） ---------- */
-function getTodayDateStr(){
-  const d = new Date();
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+/* ---------- 星星計分：一題一顆星，答對（中途沒有選錯）才算；
+   每個範圍（週一~四、全部複習）只記「最近一次完整玩完」的答對題數，下一次玩完會直接覆蓋 ---------- */
+const WORD_ROUND_CAP = 10;
+const SENTENCE_ROUND_CAP = 8;
+const SCOPE_KEYS = ['A','B','C','D','ALL'];
+const SCOPE_NAME = {A:'星期一', B:'星期二', C:'星期三', D:'星期四', ALL:'全部複習'};
+
+function getScopeMax(idx, dayKey){
+  return Math.min(WORD_ROUND_CAP, buildWordPool(idx, dayKey).length)
+       + Math.min(SENTENCE_ROUND_CAP, buildSentencePool(idx, dayKey).length) * 2
+       + buildQAPairs(idx, dayKey).length;
 }
-function getMasteryMap(){
-  try{ return JSON.parse(localStorage.getItem('osmond_mastery')||'{}'); }
+function getScoresMap(){
+  try{ return JSON.parse(localStorage.getItem('osmond_scores')||'{}'); }
   catch(e){ return {}; }
 }
-function getLessonMastery(idx){
-  const m = getMasteryMap();
-  return m[idx] || { word:{}, picture:{}, sentence:{}, qa:{} };
+function saveScopeScore(idx, dayKey, correct){
+  const m = getScoresMap();
+  if(!m[idx]) m[idx] = {};
+  m[idx][dayKey] = correct;
+  localStorage.setItem('osmond_scores', JSON.stringify(m));
 }
-function markMastered(idx, kind, key){
-  const m = getMasteryMap();
-  if(!m[idx]) m[idx] = { word:{}, picture:{}, sentence:{}, qa:{} };
-  if(!m[idx][kind]) m[idx][kind] = {};
-  if(m[idx][kind][key]) return false;
-  m[idx][kind][key] = getTodayDateStr();
-  localStorage.setItem('osmond_mastery', JSON.stringify(m));
-  return true;
-}
-function unmarkMastered(idx, kind, key){
-  const m = getMasteryMap();
-  if(!m[idx] || !m[idx][kind] || !m[idx][kind][key]) return false;
-  delete m[idx][kind][key];
-  localStorage.setItem('osmond_mastery', JSON.stringify(m));
-  return true;
+function getScopeStars(idx, dayKey){
+  const v = (getScoresMap()[idx] || {})[dayKey] || 0;
+  return Math.min(v, getScopeMax(idx, dayKey));
 }
 function getLessonStars(idx){
-  const lm = getLessonMastery(idx);
-  return Object.keys(lm.word).length + Object.keys(lm.picture).length + Object.keys(lm.sentence).length + Object.keys(lm.qa||{}).length;
+  return SCOPE_KEYS.reduce((sum,k)=>sum+getScopeStars(idx,k), 0);
 }
 function getLessonMaxStars(idx){
-  return buildLessonWordPool(idx).length * 2 + buildLessonSentencePool(idx).length + buildQAPairs(idx,'ALL').length;
-}
-function getSessionMaxStars(g){
-  const seenSentence = new Set();
-  const seenQA = new Set();
-  let max = 0;
-  g.order.forEach(item=>{
-    if(item.kind==='word'){
-      max += 2;
-    } else if(item.kind==='qa'){
-      if(!seenQA.has(item.data.q)){ seenQA.add(item.data.q); max += 1; }
-    } else {
-      if(!seenSentence.has(item.data)){ seenSentence.add(item.data); max += 1; }
-    }
-  });
-  return max;
-}
-function getScopeTodayStars(lessonIdx, dayKey){
-  const lm = getLessonMastery(lessonIdx);
-  const today = getTodayDateStr();
-  let count = 0;
-  buildWordPool(lessonIdx, dayKey).forEach(w=>{
-    if(lm.word[w.en] === today) count += 1;
-    if(lm.picture[w.en] === today) count += 1;
-  });
-  buildSentencePool(lessonIdx, dayKey).forEach(s=>{
-    if(lm.sentence[s] === today) count += 1;
-  });
-  buildQAPairs(lessonIdx, dayKey).forEach(p=>{
-    if((lm.qa||{})[p.q] === today) count += 1;
-  });
-  return count;
+  return SCOPE_KEYS.reduce((sum,k)=>sum+getScopeMax(idx,k), 0);
 }
 function getTotalStars(){
   return LESSONS.reduce((sum,_,i)=>sum+getLessonStars(i), 0);
@@ -713,8 +676,8 @@ function goGame(dayKey){
   const lessonSentencePool = buildLessonSentencePool(state.lessonIdx);
   const qaPairs = buildQAPairs(state.lessonIdx, dayKey);
   const otherAnswers = buildOtherLessonAnswers(state.lessonIdx);
-  const wordRoundSize = Math.min(10, wordPool.length);
-  const sentenceRoundSize = Math.min(8, sentencePool.length);
+  const wordRoundSize = Math.min(WORD_ROUND_CAP, wordPool.length);
+  const sentenceRoundSize = Math.min(SENTENCE_ROUND_CAP, sentencePool.length);
   const wordItems = shuffle(wordPool).slice(0, wordRoundSize).map(w=>({kind:'word', data:w}));
   const sentenceItems = shuffle(sentencePool).slice(0, sentenceRoundSize).flatMap(s=>[
     {kind:'sentence', subKind:'choice', data:s},
@@ -738,6 +701,7 @@ function speakCurrentQuestion(){
 function setupQuestion(){
   const g = state.game;
   const item = g.order[g.qIndex];
+  g.qMistake = false;
   if(item.kind === 'word'){
     const current = item.data;
     const distractors = shuffle(g.wordPool.filter(w=>w.en!==current.en)).slice(0,3);
@@ -749,8 +713,6 @@ function setupQuestion(){
     g.pictureDone = false;
     g.wordLocked = false;
     g.pictureLocked = false;
-    g.wordMistake = false;
-    g.pictureMistake = false;
   } else if(item.kind === 'qa'){
     const pair = item.data;
     const distractors = shuffle(g.otherAnswers).slice(0,3);
@@ -758,7 +720,6 @@ function setupQuestion(){
     g.qaChoices = shuffle([pair.a, ...distractors]);
     g.qaDone = false;
     g.qaLocked = false;
-    g.qaMistake = false;
   } else if(item.subKind === 'order'){
     const sentence = item.data;
     const tokens = sentence.split(' ');
@@ -766,7 +727,6 @@ function setupQuestion(){
     g.originalWords = tokens;
     g.sentenceTokens = shuffle(tokens.map((t,i)=>({text:t, idx:i})));
     g.placedTokens = [];
-    g.sentenceMistake = false;
     g.sentenceDone = false;
     g.sentenceLocked = false;
   } else {
@@ -776,14 +736,21 @@ function setupQuestion(){
     g.sentenceChoices = shuffle([current, ...distractors]);
     g.sentenceChoiceDone = false;
     g.sentenceChoiceLocked = false;
-    g.sentenceChoiceMistake = false;
   }
+}
+function completeQuestion(){
+  const g = state.game;
+  if(g.qMistake) return;
+  g.sessionStars += 1;
+  const badge = document.querySelector('.score-badge');
+  if(badge) badge.textContent = '⭐ ' + g.sessionStars;
 }
 function advanceQuestion(){
   const g = state.game;
   if(g.qIndex < g.order.length-1){
     g.qIndex += 1; setupQuestion(); render(); speakCurrentQuestion();
   } else {
+    saveScopeScore(state.lessonIdx, g.dayKey, g.sessionStars);
     state.screen='gameEnd'; render(); confettiBurst();
   }
 }
@@ -791,27 +758,18 @@ function handleAnswer(btnEl, en, kind){
   const g = state.game;
   const doneKey = kind==='word' ? 'wordDone' : 'pictureDone';
   const lockKey = kind==='word' ? 'wordLocked' : 'pictureLocked';
-  const mistakeKey = kind==='word' ? 'wordMistake' : 'pictureMistake';
   if(g[doneKey] || g[lockKey]) return;
   if(en === g.current.en){
     g[lockKey] = true;
     btnEl.classList.add('correct');
-    if(!g[mistakeKey]){
-      const gained = markMastered(state.lessonIdx, kind, g.current.en);
-      if(gained){
-        g.sessionStars += 1;
-        const badge = document.querySelector('.score-badge');
-        if(badge) badge.textContent = '⭐ ' + g.sessionStars;
-      }
-    }
+    if(g.wordLocked && g.pictureLocked) completeQuestion();
     setTimeout(()=>{
       g[doneKey] = true;
       if(g.wordDone && g.pictureDone) advanceQuestion();
       else render();
     }, 600);
   } else {
-    g[mistakeKey] = true;
-    unmarkMastered(state.lessonIdx, kind, g.current.en);
+    g.qMistake = true;
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -832,14 +790,7 @@ function handleSentenceTap(btnEl, idx){
       g.sentenceLocked = false;
       if(g.sentenceTokens.length === 0){
         g.sentenceDone = true;
-        if(!g.sentenceMistake){
-          const gained = markMastered(state.lessonIdx, 'sentence', g.current);
-          if(gained){
-            g.sessionStars += 1;
-            const badge = document.querySelector('.score-badge');
-            if(badge) badge.textContent = '⭐ ' + g.sessionStars;
-          }
-        }
+        completeQuestion();
         render();
         setTimeout(()=>advanceQuestion(), 700);
       } else {
@@ -847,8 +798,7 @@ function handleSentenceTap(btnEl, idx){
       }
     }, 300);
   } else {
-    g.sentenceMistake = true;
-    unmarkMastered(state.lessonIdx, 'sentence', g.current);
+    g.qMistake = true;
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -860,21 +810,13 @@ function handleSentenceChoiceTap(btnEl, idx){
   if(text === g.current){
     g.sentenceChoiceLocked = true;
     btnEl.classList.add('correct');
-    if(!g.sentenceChoiceMistake){
-      const gained = markMastered(state.lessonIdx, 'sentence', g.current);
-      if(gained){
-        g.sessionStars += 1;
-        const badge = document.querySelector('.score-badge');
-        if(badge) badge.textContent = '⭐ ' + g.sessionStars;
-      }
-    }
+    completeQuestion();
     setTimeout(()=>{
       g.sentenceChoiceDone = true;
       advanceQuestion();
     }, 600);
   } else {
-    g.sentenceChoiceMistake = true;
-    unmarkMastered(state.lessonIdx, 'sentence', g.current);
+    g.qMistake = true;
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -886,21 +828,13 @@ function handleQATap(btnEl, idx){
   if(text === g.current.a){
     g.qaLocked = true;
     btnEl.classList.add('correct');
-    if(!g.qaMistake){
-      const gained = markMastered(state.lessonIdx, 'qa', g.current.q);
-      if(gained){
-        g.sessionStars += 1;
-        const badge = document.querySelector('.score-badge');
-        if(badge) badge.textContent = '⭐ ' + g.sessionStars;
-      }
-    }
+    completeQuestion();
     setTimeout(()=>{
       g.qaDone = true;
       advanceQuestion();
     }, 600);
   } else {
-    g.qaMistake = true;
-    unmarkMastered(state.lessonIdx, 'qa', g.current.q);
+    g.qMistake = true;
     btnEl.classList.add('wrong');
     setTimeout(()=>{ btnEl.classList.remove('wrong'); }, 500);
   }
@@ -1173,7 +1107,7 @@ function renderGameEnd(){
         <div class="end-stars">🌟🎉🌟</div>
         <h1>遊戲結束！</h1>
         <h2>完成了 ${g.order.length} 題（單字＋句子＋問答），獲得 ${g.sessionStars} 顆星星！</h2>
-        <div class="stars-total">⭐ 今天：${getScopeTodayStars(state.lessonIdx, g.dayKey)} / ${getSessionMaxStars(g)}</div>
+        <div class="stars-total">⭐ 今天（${SCOPE_NAME[g.dayKey]}）：${getScopeStars(state.lessonIdx, g.dayKey)} / ${getScopeMax(state.lessonIdx, g.dayKey)}</div>
         <div class="stars-total">⭐ 這一課總共：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}</div>
         <div class="stars-total">⭐ 全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
         <div>
