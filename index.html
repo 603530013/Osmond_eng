@@ -48,7 +48,7 @@
     width:100%; max-width:600px; text-align:center; min-height:320px;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
   }
-  .flashcard .emoji-big{font-size:6rem; line-height:1;}
+  .flashcard .emoji-big{font-size:9rem; line-height:1;}
   .word-en{font-size:3rem; font-weight:bold; color:var(--pink); word-break:break-word;}
   .word-zh{font-size:1.4rem; color:#888;}
   .sentence-en{font-size:2rem; font-weight:bold; color:var(--blue); line-height:1.4;}
@@ -94,8 +94,8 @@
   .choice-btn.wrong{background:#ffd6d6; border-color:#ff6b6b; animation:shake .4s;}
   .choice-btn.text-only{font-size:1.6rem; padding:18px 10px;}
   .choice-btn.icon-only{padding:10px;}
-  .choice-btn.icon-only .game-emoji{font-size:2.8rem;}
-  .choice-btn.icon-only .svg-icon svg{width:56px; height:56px;}
+  .choice-btn.icon-only .game-emoji{font-size:6.4rem; line-height:1.1;}
+  .choice-btn.icon-only .svg-icon svg{width:110px; height:110px;}
   .choice-btn.disabled-choice{opacity:0.35;}
   .game-section{width:100%; max-width:520px; margin-bottom:16px;}
   .section-label{font-weight:bold; color:#a15c00; margin-bottom:8px; font-size:1.1rem;}
@@ -120,12 +120,21 @@
   .game-emoji{font-size:2.6rem;}
   .svg-icon{display:inline-flex;}
   .svg-icon svg{width:100%; height:100%;}
-  .emoji-big.svg-icon svg{width:110px; height:110px;}
+  .emoji-big.svg-icon svg{width:200px; height:200px;}
   .img-icon{display:inline-flex; border-radius:16px; overflow:hidden; box-shadow:0 3px 0 rgba(0,0,0,0.1);}
   .img-icon img{width:100%; height:100%; object-fit:cover; display:block;}
-  .emoji-big.img-icon{width:140px; height:140px;}
+  .emoji-big.img-icon{width:220px; height:220px;}
   .game-emoji.img-icon{width:90px; height:90px;}
-  .choice-btn.icon-only .img-icon{width:80px; height:80px;}
+  .choice-btn.icon-only .img-icon{width:120px; height:120px;}
+  @media (max-width:500px){
+    .screen{padding:14px;}
+    h2{font-size:1.3rem;}
+    .progress{margin-bottom:12px;}
+    .big-speaker{width:78px; height:78px; font-size:2.2rem; margin:4px 0 12px;}
+    .choice-grid{gap:12px;}
+    .choice-btn.text-only{padding:12px 8px;}
+    .game-section{margin-bottom:10px;}
+  }
   @keyframes pop{ 0%{transform:scale(1);} 50%{transform:scale(1.1);} 100%{transform:scale(1);} }
   @keyframes shake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);} 75%{transform:translateX(8px);} }
 </style>
