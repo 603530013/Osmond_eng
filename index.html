@@ -447,6 +447,61 @@ const DAY_KEYS = ["A","B","C","D"];
 const DAY_ICON = {A:"1️⃣",B:"2️⃣",C:"3️⃣",D:"4️⃣",E:"⭐"};
 const GAME_SCOPE_LABEL = {A:"測驗範圍：星期一",B:"測驗範圍：星期二",C:"測驗範圍：星期三",D:"測驗範圍：星期四",ALL:"測驗範圍：全部（週一~週四）"};
 
+/* ---------- 期中考複習：跨課（L1~L12）的單字、句子、問答 ---------- */
+const MIDTERM_GROUPS = [
+  {key:'M1', name:'L1 ~ L4', from:0, to:3, icon:'1️⃣', cls:'dayA', wordCap:15, sentenceCap:6, qaCap:4},
+  {key:'M2', name:'L5 ~ L8', from:4, to:7, icon:'2️⃣', cls:'dayB', wordCap:15, sentenceCap:6, qaCap:4},
+  {key:'M3', name:'L9 ~ L12', from:8, to:11, icon:'3️⃣', cls:'dayC', wordCap:15, sentenceCap:6, qaCap:4},
+  {key:'MALL', name:'全部 L1 ~ L12', from:0, to:11, icon:'⭐', cls:'dayE', wordCap:20, sentenceCap:8, qaCap:6},
+];
+function getMidGroup(key){ return MIDTERM_GROUPS.find(g=>g.key===key); }
+function midLessonIdxs(group){
+  const idxs = [];
+  for(let i=group.from; i<=group.to && i<LESSONS.length; i++) idxs.push(i);
+  return idxs;
+}
+function midWordPool(group){
+  const seen = new Set(), words = [];
+  midLessonIdxs(group).forEach(i=>buildLessonWordPool(i).forEach(w=>{
+    if(!seen.has(w.en)){ seen.add(w.en); words.push(w); }
+  }));
+  return words;
+}
+function midSentencePool(group){
+  const seen = new Set(), sentences = [];
+  midLessonIdxs(group).forEach(i=>buildLessonSentencePool(i).forEach(s=>{
+    if(!seen.has(s)){ seen.add(s); sentences.push(s); }
+  }));
+  return sentences;
+}
+function midQAPairs(group){
+  // 錯誤選項取自「這題所屬課以外」的其他課，避免出現同樣也說得通的回答
+  let pairs = [];
+  midLessonIdxs(group).forEach(i=>{
+    const others = buildOtherLessonAnswers(i);
+    pairs = pairs.concat(buildQAPairs(i, 'ALL').map(p=>({...p, others})));
+  });
+  return pairs;
+}
+function getMidMax(key){
+  const g = getMidGroup(key);
+  return Math.min(g.wordCap, midWordPool(g).length)
+       + Math.min(g.sentenceCap, midSentencePool(g).length) * 2
+       + Math.min(g.qaCap, midQAPairs(g).length);
+}
+function getMidScoresMap(){
+  try{ return JSON.parse(localStorage.getItem('osmond_mid_scores')||'{}'); }
+  catch(e){ return {}; }
+}
+function saveMidScore(key, correct){
+  const m = getMidScoresMap();
+  m[key] = correct;
+  localStorage.setItem('osmond_mid_scores', JSON.stringify(m));
+}
+function getMidStars(key){
+  return Math.min(getMidScoresMap()[key] || 0, getMidMax(key));
+}
+
 /* ---------- 手繪小圖示（給沒有現成 emoji 的抽象單字用） ---------- */
 const ICONS = {
   short: `<svg viewBox="0 0 120 120"><line x1="15" y1="38" x2="105" y2="38" stroke="#3a3a3a" stroke-width="8" stroke-linecap="round"/><line x1="35" y1="80" x2="70" y2="80" stroke="#3a3a3a" stroke-width="8" stroke-linecap="round"/><ellipse cx="52" cy="80" rx="30" ry="18" fill="none" stroke="#ff3b3b" stroke-width="5"/></svg>`,
@@ -659,8 +714,9 @@ function buildOtherLessonAnswers(excludeLessonIdx){
   return answers;
 }
 
-function goHome(){ state = {screen:'home', lessonIdx:0, dayKey:null, items:[], pos:0, game:null}; render(); }
-function goLesson(idx){ state.screen='lesson'; state.lessonIdx=idx; render(); }
+function goHome(){ state = {screen:'home', lessonIdx:0, dayKey:null, items:[], pos:0, game:null, mid:false}; render(); }
+function goLesson(idx){ state.screen='lesson'; state.lessonIdx=idx; state.mid=false; render(); }
+function goMid(){ state.screen='mid'; state.mid=true; render(); }
 function goReviewMenu(){ state.screen='reviewMenu'; render(); }
 function goGameDays(){ state.screen='gameDays'; render(); }
 
@@ -674,6 +730,15 @@ function goReview(dayKey){
   state.screen='review'; state.dayKey=dayKey; state.items=items; state.pos=0;
   render();
 }
+function goMidReview(key){
+  const g = getMidGroup(key);
+  const items = [
+    ...midWordPool(g).map(w=>({type:'word', ...w})),
+    ...midSentencePool(g).map(s=>({type:'sentence', en:s}))
+  ];
+  state.screen='review'; state.mid=true; state.dayKey=key; state.items=items; state.pos=0;
+  render();
+}
 function nextReview(){
   if(state.pos < state.items.length-1){ state.pos += 1; render(); }
   else { state.screen='reviewEnd'; render(); }
@@ -685,22 +750,43 @@ function prevReview(){
 /* ---------- 聽力遊戲（單字配對＋句子排序合併，答對才給星星） ---------- */
 function goGame(dayKey){
   dayKey = dayKey || 'ALL';
-  const wordPool = buildWordPool(state.lessonIdx, dayKey);
-  const sentencePool = buildSentencePool(state.lessonIdx, dayKey);
-  const lessonSentencePool = buildLessonSentencePool(state.lessonIdx);
-  const qaPairs = buildQAPairs(state.lessonIdx, dayKey);
-  const otherAnswers = buildOtherLessonAnswers(state.lessonIdx);
-  const wordRoundSize = Math.min(WORD_ROUND_CAP, wordPool.length);
-  const sentenceRoundSize = Math.min(SENTENCE_ROUND_CAP, sentencePool.length);
-  const wordItems = shuffle(wordPool).slice(0, wordRoundSize).map(w=>({kind:'word', data:w}));
-  const sentenceItems = shuffle(sentencePool).slice(0, sentenceRoundSize).flatMap(s=>[
+  startRound({
+    dayKey,
+    label: GAME_SCOPE_LABEL[dayKey],
+    wordPool: buildWordPool(state.lessonIdx, dayKey),
+    sentencePool: buildSentencePool(state.lessonIdx, dayKey),
+    lessonSentencePool: buildLessonSentencePool(state.lessonIdx),
+    qaPairs: buildQAPairs(state.lessonIdx, dayKey),
+    otherAnswers: buildOtherLessonAnswers(state.lessonIdx),
+    wordCap: WORD_ROUND_CAP, sentenceCap: SENTENCE_ROUND_CAP, qaCap: Infinity,
+  });
+}
+function goMidGame(key){
+  const grp = getMidGroup(key);
+  const sentencePool = midSentencePool(grp);
+  state.mid = true;
+  startRound({
+    dayKey: key, mid: true,
+    label: '期中考複習：' + grp.name,
+    wordPool: midWordPool(grp),
+    sentencePool,
+    lessonSentencePool: sentencePool,
+    qaPairs: midQAPairs(grp),
+    otherAnswers: [],
+    wordCap: grp.wordCap, sentenceCap: grp.sentenceCap, qaCap: grp.qaCap,
+  });
+}
+function startRound(o){
+  const wordItems = shuffle(o.wordPool).slice(0, Math.min(o.wordCap, o.wordPool.length)).map(w=>({kind:'word', data:w}));
+  const sentenceItems = shuffle(o.sentencePool).slice(0, Math.min(o.sentenceCap, o.sentencePool.length)).flatMap(s=>[
     {kind:'sentence', subKind:'choice', data:s},
     {kind:'sentence', subKind:'order', data:s}
   ]);
-  const qaItems = shuffle(qaPairs).map(p=>({kind:'qa', data:p}));
+  const qaItems = shuffle(o.qaPairs).slice(0, Math.min(o.qaCap, o.qaPairs.length)).map(p=>({kind:'qa', data:p}));
   const order = shuffle([...wordItems, ...sentenceItems, ...qaItems]);
   state.screen = 'game';
-  state.game = { dayKey, wordPool, sentencePool, lessonSentencePool, otherAnswers, order, qIndex:0, sessionStars:0 };
+  state.game = { dayKey:o.dayKey, mid:!!o.mid, label:o.label, wordPool:o.wordPool, sentencePool:o.sentencePool,
+    lessonSentencePool:o.lessonSentencePool, otherAnswers:o.otherAnswers, order, qIndex:0, sessionStars:0 };
   setupQuestion();
   render();
   speakCurrentQuestion();
@@ -729,7 +815,7 @@ function setupQuestion(){
     g.pictureLocked = false;
   } else if(item.kind === 'qa'){
     const pair = item.data;
-    const distractors = shuffle(g.otherAnswers).slice(0,3);
+    const distractors = shuffle(pair.others || g.otherAnswers).slice(0,3);
     g.current = pair;
     g.qaChoices = shuffle([pair.a, ...distractors]);
     g.qaDone = false;
@@ -764,7 +850,8 @@ function advanceQuestion(){
   if(g.qIndex < g.order.length-1){
     g.qIndex += 1; setupQuestion(); render(); speakCurrentQuestion();
   } else {
-    saveScopeScore(state.lessonIdx, g.dayKey, g.sessionStars);
+    if(g.mid) saveMidScore(g.dayKey, g.sessionStars);
+    else saveScopeScore(state.lessonIdx, g.dayKey, g.sessionStars);
     state.screen='gameEnd'; render(); confettiBurst();
   }
 }
@@ -859,6 +946,7 @@ function render(){
   const app = document.getElementById('app');
   if(state.screen==='home') app.innerHTML = renderHome();
   else if(state.screen==='lesson') app.innerHTML = renderLesson();
+  else if(state.screen==='mid') app.innerHTML = renderMid();
   else if(state.screen==='reviewMenu') app.innerHTML = renderReviewMenu();
   else if(state.screen==='gameDays') app.innerHTML = renderGameDayPicker();
   else if(state.screen==='review') app.innerHTML = renderReview();
@@ -884,6 +972,7 @@ function renderHome(){
     <div class="screen">
       <h1>🌈 Osmond 英文單字遊戲</h1>
       <div class="stars-total">⭐ 累積總星星：${getTotalStars()} / ${getTotalMaxStars()}</div>
+      <button class="game-btn" style="margin:0 0 18px" data-action="mid">📝 期中考複習（L1 ~ L12）</button>
       <h2>選一課開始玩吧！</h2>
       <div class="grid">${cards}</div>
     </div>
@@ -908,6 +997,33 @@ function renderLesson(){
           <span>直接玩遊戲</span>
         </button>
       </div>
+    </div>
+  `;
+}
+
+function renderMid(){
+  const reviewBtns = MIDTERM_GROUPS.map(g=>`
+    <button class="card-btn ${g.cls}" data-action="mid-review" data-key="${g.key}">
+      <span class="emoji">${g.icon}</span>
+      <span>${g.name}</span>
+    </button>
+  `).join('');
+  const gameBtns = MIDTERM_GROUPS.map(g=>`
+    <button class="card-btn ${g.cls}" data-action="mid-game" data-key="${g.key}">
+      <span class="emoji">${g.icon}</span>
+      <span>${g.name}</span>
+      <span class="lesson-stars">⭐ ${getMidStars(g.key)} / ${getMidMax(g.key)}</span>
+    </button>
+  `).join('');
+  return `
+    <div class="screen">
+      <button class="back-btn" data-action="home">⬅️ 回首頁</button>
+      <h1>📝 期中考複習（L1 ~ L12）</h1>
+      <h2>📖 先複習：聽發音、看單字和句子</h2>
+      <div class="grid">${reviewBtns}</div>
+      <h2 style="margin-top:28px">🎮 模擬考：單字、句子、問答混在一起考</h2>
+      <div class="grid">${gameBtns}</div>
+      <div class="hint">建議先分段練（L1~L4、L5~L8、L9~L12），最後再挑戰全部</div>
     </div>
   `;
 }
@@ -981,7 +1097,7 @@ function renderReview(){
 
   return `
     <div class="screen">
-      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <button class="back-btn" data-action="lesson-back">⬅️ ${state.mid ? '回期中考複習' : '回課程選單'}</button>
       <div class="progress">${dots}</div>
       <div class="practice-wrap">
         <div class="flashcard">${cardInner}</div>
@@ -1006,7 +1122,7 @@ function renderReviewEnd(){
         <div>
           <button class="big-btn" style="background:var(--purple)" data-action="game-from-review">🎮 玩遊戲</button>
           <button class="big-btn" style="background:var(--green)" data-action="replay-review">🔁 再複習一次</button>
-          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 選別的星期</button>
+          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 ${state.mid ? '選別的範圍' : '選別的星期'}</button>
           <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
         </div>
       </div>
@@ -1102,11 +1218,11 @@ function renderGame(){
 
   return `
     <div class="screen">
-      <button class="back-btn" data-action="lesson-back">⬅️ 回課程選單</button>
+      <button class="back-btn" data-action="lesson-back">⬅️ ${g.mid ? '回期中考複習' : '回課程選單'}</button>
       <div class="score-badge">⭐ ${g.sessionStars}</div>
       <div class="progress">${dots}</div>
       <div class="practice-wrap">
-        <div class="tag">${GAME_SCOPE_LABEL[g.dayKey]}</div>
+        <div class="tag">${g.label}</div>
         ${body}
       </div>
     </div>
@@ -1121,12 +1237,16 @@ function renderGameEnd(){
         <div class="end-stars">🌟🎉🌟</div>
         <h1>遊戲結束！</h1>
         <h2>完成了 ${g.order.length} 題（單字＋句子＋問答），獲得 ${g.sessionStars} 顆星星！</h2>
+        ${g.mid ? `
+        <div class="stars-total">⭐ ${g.label}：${getMidStars(g.dayKey)} / ${getMidMax(g.dayKey)}</div>
+        ` : `
         <div class="stars-total">⭐ 今天（${SCOPE_NAME[g.dayKey]}）：${getScopeStars(state.lessonIdx, g.dayKey)} / ${getScopeMax(state.lessonIdx, g.dayKey)}</div>
         <div class="stars-total">⭐ 這一課總共：${getLessonStars(state.lessonIdx)} / ${getLessonMaxStars(state.lessonIdx)}</div>
         <div class="stars-total">⭐ 全部累積：${getTotalStars()} / ${getTotalMaxStars()}</div>
+        `}
         <div>
           <button class="big-btn" style="background:var(--purple)" data-action="game">🔁 再玩一次</button>
-          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 回課程選單</button>
+          <button class="big-btn" style="background:var(--blue)" data-action="lesson-back">📚 ${g.mid ? '回期中考複習' : '回課程選單'}</button>
           <button class="big-btn" style="background:var(--pink)" data-action="home">🏠 回首頁</button>
         </div>
       </div>
@@ -1142,15 +1262,18 @@ function bindEvents(){
       else if(action==='review-menu') goReviewMenu();
       else if(action==='game-days') goGameDays();
       else if(action==='review') goReview(el.dataset.key);
-      else if(action==='replay-review') goReview(state.dayKey);
+      else if(action==='replay-review') state.mid ? goMidReview(state.dayKey) : goReview(state.dayKey);
+      else if(action==='mid') goMid();
+      else if(action==='mid-review') goMidReview(el.dataset.key);
+      else if(action==='mid-game') goMidGame(el.dataset.key);
       else if(action==='home') goHome();
-      else if(action==='lesson-back') goLesson(state.lessonIdx);
+      else if(action==='lesson-back') state.mid ? goMid() : goLesson(state.lessonIdx);
       else if(action==='next') nextReview();
       else if(action==='prev') prevReview();
       else if(action==='speak'){ const item = state.items[state.pos]; speak(item.en, item.type==='sentence' ? SENTENCE_RATE : WORD_RATE); }
       else if(action==='start-game') goGame(el.dataset.day);
-      else if(action==='game-from-review') goGame(state.dayKey==='E' ? 'ALL' : state.dayKey);
-      else if(action==='game') goGame(state.game ? state.game.dayKey : 'ALL');
+      else if(action==='game-from-review') state.mid ? goMidGame(state.dayKey) : goGame(state.dayKey==='E' ? 'ALL' : state.dayKey);
+      else if(action==='game') (state.game && state.game.mid) ? goMidGame(state.game.dayKey) : goGame(state.game ? state.game.dayKey : 'ALL');
       else if(action==='speak-current'){
         const item = state.game.order[state.game.qIndex];
         if(item.kind==='word') speak(item.data.en, WORD_RATE);
